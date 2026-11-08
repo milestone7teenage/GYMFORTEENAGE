@@ -24,14 +24,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          APP_PATH="build/GymForTeenage.xcarchive/Products/Applications/GymForTeenage.app"
+          plutil -lint "$APP_PATH/Info.plist"
           mkdir -p package/Payload
-          cp -R build/GymForTeenage.xcarchive/Products/Applications/GymForTeenage.app package/Payload/
+          cp -R "$APP_PATH" package/Payload/
           (cd package && zip -qr ../GymForTeenage-unsigned-ipa-for-esign-validation.ipa Payload)
           unzip -t GymForTeenage-unsigned-ipa-for-esign-validation.ipa
-          unzip -l GymForTeenage-unsigned-ipa-for-esign-validation.ipa | grep 'Payload/GymForTeenage.app/Info.plist'
-          test -d package/Payload/GymForTeenage.app
-          test -f package/Payload/GymForTeenage.app/Info.plist
-          if [ -e package/Payload/GymForTeenage.app/embedded.mobileprovision ]; then echo 'Unexpected provisioning profile in unsigned IPA'; exit 1; fi
+          python3 scripts/validate_ipa.py "$APP_PATH" GymForTeenage-unsigned-ipa-for-esign-validation.ipa
       - uses: actions/upload-artifact@v4
         with:
           name: unsigned-ipa-for-esign-validation
