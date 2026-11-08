@@ -88,8 +88,8 @@ struct PremiumHomeView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Image(systemName: icon).foregroundStyle(tint)
                     Spacer(minLength: 4)
-                    Text(latest(kind).map { "\($0.value.formatted(.number.precision(.fractionLength(0...1))))" } ?? "—").font(.system(.title, design: .rounded, weight: .bold)).monospacedDigit()
-                    Text("\(title) · \(unit)").font(.caption.weight(.medium)).foregroundStyle(TeenTheme.muted)
+                    Text(latest(kind).map { "\($0.value.formatted(.number.precision(.fractionLength(0...1))))" } ?? "—").font(.system(.title, design: .rounded, weight: .bold)).monospacedDigit().frame(maxWidth: .infinity, alignment: .center)
+                    Text("\(title) · \(unit)").font(.caption.weight(.medium)).foregroundStyle(TeenTheme.muted).frame(maxWidth: .infinity, alignment: .center)
                 }
                 .frame(maxWidth: .infinity).frame(height: 142, alignment: .leading)
             }.frame(maxWidth: .infinity)
@@ -256,7 +256,7 @@ struct PremiumSettingsView: View {
         NavigationStack { ScrollView(showsIndicators: false) { VStack(spacing: 16) {
             HStack { VStack(alignment: .leading, spacing: 4) { Text("настройки").font(.system(.largeTitle, design: .rounded, weight: .bold)); Text("Данные остаются на устройстве").font(.subheadline).foregroundStyle(TeenTheme.muted) }; Spacer() }
             TeenSectionTitle("данные")
-            TeenCard(accent: TeenTheme.ice) { VStack(spacing: 2) { settingButton("Экспорт JSON", detail: "Создать полную резервную копию", icon: "square.and.arrow.up", tint: TeenTheme.ice) { shareURL = store.export(); if shareURL == nil { message = "Не удалось создать копию" } }; divider; settingButton("Импорт копии", detail: "Заменить данные из проверенного JSON", icon: "square.and.arrow.down", tint: TeenTheme.violet) { importing = true }; divider; settingButton("Очистить все данные", detail: "История, вода и незавершённая тренировка", icon: "trash", tint: .red) { confirmClear = true } } }
+            TeenCard(accent: TeenTheme.ice) { VStack(spacing: 2) { settingButton("Экспорт JSON", detail: "Создать полную резервную копию", icon: "square.and.arrow.up", tint: TeenTheme.ice) { shareURL = store.export(); if shareURL == nil { message = "Не удалось создать копию" } }; divider; settingButton("Импорт копии", detail: "Выбрать JSON-файл", icon: "square.and.arrow.down", tint: TeenTheme.violet) { importing = true }; divider; settingButton("Вставить копию из буфера", detail: "Импортировать скопированный JSON", icon: "doc.on.clipboard", tint: TeenTheme.lime) { importClipboard() }; divider; settingButton("Очистить все данные", detail: "История, вода и незавершённая тренировка", icon: "trash", tint: .red) { confirmClear = true } } }
             TeenSectionTitle("напоминания")
             TeenCard(accent: TeenTheme.lime) { HStack(spacing: 13) { Image(systemName: "drop.badge.clock").foregroundStyle(TeenTheme.lime).font(.title3).frame(width: 38, height: 38).background(TeenTheme.lime.opacity(0.12), in: Circle()); VStack(alignment: .leading, spacing: 4) { Text("Вода").font(.headline); Text("Каждые 2 часа · 09:00–23:00").font(.caption).foregroundStyle(TeenTheme.muted) }; Spacer(); Toggle("Вода", isOn: Binding(get: { store.reminders }, set: { store.reminders = $0; store.save(); Task { await store.schedule() } })).labelsHidden().tint(TeenTheme.lime) } }
             TeenSectionTitle("информация")
@@ -271,5 +271,18 @@ struct PremiumSettingsView: View {
         }
     }
     private var divider: some View { Rectangle().fill(TeenTheme.line).frame(height: 1).padding(.leading, 52) }
+    private func importClipboard() {
+        guard let text = UIPasteboard.general.string, let data = text.data(using: .utf8) else {
+            message = "В буфере обмена нет JSON-текста резервной копии"
+            return
+        }
+        do {
+            try store.restore(data)
+            message = "Копия импортирована из буфера обмена"
+            Task { await store.schedule() }
+        } catch {
+            message = "Не удалось импортировать: \(error.localizedDescription)"
+        }
+    }
     private func settingButton(_ title: String, detail: String, icon: String, tint: Color, action: @escaping () -> Void) -> some View { Button(action: action) { HStack(spacing: 13) { Image(systemName: icon).foregroundStyle(tint).frame(width: 38, height: 38).background(tint.opacity(0.13), in: Circle()); VStack(alignment: .leading, spacing: 3) { Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(.white); Text(detail).font(.caption).foregroundStyle(TeenTheme.muted) }; Spacer(); Image(systemName: "chevron.right").font(.caption).foregroundStyle(TeenTheme.muted) }.padding(.vertical, 5) }.buttonStyle(TeenPressStyle()) }
 }

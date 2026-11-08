@@ -46,8 +46,8 @@ struct TeenMetric: View {
             VStack(alignment: .leading, spacing: 7) {
                 Image(systemName: icon).foregroundStyle(tint).font(.headline)
                 Spacer(minLength: 4)
-                Text(value).font(.system(.title3, design: .rounded, weight: .bold)).monospacedDigit()
-                Text(title.uppercased()).font(.caption2.weight(.bold)).foregroundStyle(TeenTheme.muted).lineLimit(1)
+                Text(value).font(.system(.title3, design: .rounded, weight: .bold)).monospacedDigit().frame(maxWidth: .infinity, alignment: .center)
+                Text(title.uppercased()).font(.caption2.weight(.bold)).foregroundStyle(TeenTheme.muted).lineLimit(1).frame(maxWidth: .infinity, alignment: .center)
             }
             .frame(maxWidth: .infinity).frame(height: 116, alignment: .leading)
         }
