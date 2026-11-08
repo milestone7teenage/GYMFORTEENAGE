@@ -130,9 +130,7 @@ struct ExerciseView: View {
         return Card {
             VStack(alignment: .leading) {
                 Text("Последние выполнения").font(.headline)
-                ForEach(recentRecords) { record in
-                    Text("\(record.name) · \(record.date.formatted(date: .abbreviated, time: .omitted))")
-                }
+                Text(recentRecords.map { "\($0.name) · \($0.date.formatted(date: .abbreviated, time: .omitted))" }.joined(separator: "\n"))
             }
         }
     }
