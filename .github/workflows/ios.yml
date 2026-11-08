@@ -10,6 +10,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Select installed Xcode
         run: xcodebuild -version
+      - name: Validate OpenStep project file
+        run: plutil -lint GymForTeenage.xcodeproj/project.pbxproj
+      - name: Confirm Xcode can read project and scheme
+        run: xcodebuild -list -project GymForTeenage.xcodeproj
       - name: Run XCTest suite
         run: xcodebuild test -project GymForTeenage.xcodeproj -scheme GymForTeenage -destination 'platform=iOS Simulator,name=iPhone 16' CODE_SIGNING_ALLOWED=NO
       - name: Xcode static analysis
@@ -33,4 +37,3 @@ jobs:
           name: unsigned-ipa-for-esign-validation
           path: GymForTeenage-unsigned-ipa-for-esign-validation.ipa
           if-no-files-found: error
-
