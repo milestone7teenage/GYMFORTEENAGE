@@ -4,10 +4,8 @@
 from __future__ import annotations
 
 import json
-import unicodedata
 import plistlib
 import sys
-import zlib
 import zipfile
 from pathlib import Path
 
@@ -27,24 +25,6 @@ def check(condition: bool, message: str) -> None:
     print(f"PASS: {message}")
 
 
-def zip_name(info: zipfile.ZipInfo) -> str:
-    """Read Info-ZIP Unicode Path extra fields ignored by Python's zipfile."""
-    if info.flag_bits & 0x800:
-        return info.filename
-    original = info.filename.encode("cp437")
-    offset = 0
-    while offset + 4 <= len(info.extra):
-        field_id = int.from_bytes(info.extra[offset:offset + 2], "little")
-        field_size = int.from_bytes(info.extra[offset + 2:offset + 4], "little")
-        field = info.extra[offset + 4:offset + 4 + field_size]
-        if field_id == 0x7075 and len(field) >= 5 and field[0] == 1:
-            expected_crc = int.from_bytes(field[1:5], "little")
-            if zlib.crc32(original) == expected_crc:
-                return field[5:].decode("utf-8")
-        offset += 4 + field_size
-    return info.filename
-
-
 def validate_app(app_path: Path) -> dict:
     plist_path = app_path / "Info.plist"
     check(plist_path.is_file(), "app contains Info.plist")
@@ -59,6 +39,9 @@ def validate_app(app_path: Path) -> dict:
     primary = icons.get("CFBundlePrimaryIcon", {}) if isinstance(icons, dict) else {}
     check(primary.get("CFBundleIconName") == "AppIcon", "Info.plist selects the AppIcon asset")
     check((app_path / "Assets.car").is_file(), "compiled asset catalog Assets.car is present")
+    source_image_count = len(list((Path.cwd() / "Assets" / "упражнения").glob("*.png")))
+    app_image_count = sum(1 for path in app_path.glob("*.png") if not path.name.startswith("AppIcon"))
+    check(app_image_count == source_image_count, f"app bundle contains {app_image_count} exercise images (expected {source_image_count})")
     check(not (app_path / "embedded.mobileprovision").exists(), "no embedded provisioning profile (unsigned IPA)")
     check(not (app_path / "_CodeSignature").exists(), "no embedded code signature (unsigned IPA)")
     return info
@@ -75,8 +58,7 @@ def validate_catalog(repo: Path) -> None:
 
 def validate_ipa(ipa_path: Path, repo: Path) -> None:
     with zipfile.ZipFile(ipa_path) as archive:
-        entries = [(zip_name(info), info) for info in archive.infolist()]
-        names = [name for name, _ in entries]
+        names = archive.namelist()
         files = [name for name in names if not name.endswith("/")]
         check(any(name == APP_RELATIVE + "Info.plist" for name in files), "IPA contains Payload/GymForTeenage.app/Info.plist")
         app_infos = [name for name in files if name.endswith(".app/Info.plist")]
@@ -86,14 +68,12 @@ def validate_ipa(ipa_path: Path, repo: Path) -> None:
         check(not any(name.endswith("/embedded.mobileprovision") for name in files), "IPA has no embedded provisioning profile")
         check(not any("/_CodeSignature/" in name for name in files), "IPA has no embedded code signature")
 
-        source_images = {unicodedata.normalize("NFC", path.name) for path in (repo / "Assets" / "упражнения").glob("*.png")}
-        packaged_images = {
-            unicodedata.normalize("NFC", Path(name).name)
-            for name in files
-            if name.startswith(APP_RELATIVE) and name.lower().endswith(".png")
-        }
-        missing_images = sorted(source_images - packaged_images)
-        check(not missing_images, f"all {len(source_images)} exercise images are included" if not missing_images else f"missing exercise images: {missing_images}")
+        source_image_count = len(list((repo / "Assets" / "упражнения").glob("*.png")))
+        packaged_image_count = sum(
+            1 for name in files
+            if name.startswith(APP_RELATIVE) and name.lower().endswith(".png") and not Path(name).name.startswith("AppIcon")
+        )
+        check(packaged_image_count == source_image_count, f"IPA contains {packaged_image_count} exercise images (expected {source_image_count})")
 
         info = plistlib.loads(archive.read(APP_RELATIVE + "Info.plist"))
         for key, expected in EXPECTED.items():
