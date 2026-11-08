@@ -65,9 +65,15 @@
 
 ## Implementation follow-up status (2026-11-08)
 
+### Premium UI redesign — completed and build-verified
+
+The presentation layer now uses the `teenage` premium dark fitness design system documented in `REDESIGN.md`: ink and graphite surfaces, lime primary actions, violet/ice analytical accents, compact metric cards, custom bottom navigation, animated water progress, workout cards, richer set controls, redesigned backup/settings actions, and data-aware empty states. The visual layer is split into `PremiumDesign.swift` and `PremiumViews.swift`; existing models, JSON schema, local persistence, training catalogue and metrics remain unchanged.
+
+GitHub Actions run 42505685262 on macOS completed successfully for commit `09fb771`: XCTest executed 13 tests with 0 failures, static analysis and unsigned archive completed, and the IPA validation confirmed the required bundle metadata, `AppIcon`, `Assets.car`, `Payload/GymForTeenage.app`, all 15 exercise images, and absence of a provisioning profile or embedded code signature. The unsigned IPA artifact is structurally prepared for independent ESign signing. Device-side installation and signing remain an external check.
+
 Implemented in the existing app: recent-session comparison by workout type, 12-month measurement charts, seven-day water chart, left-swipe skipping, recovery navigation to the stored active position, centralized tonnage/set-count functions, version/structure validation for JSON import, atomic file replacement before applying imported state, and integration tests for restart recovery, measurements/water round-trip, rejected import without mutation, replacement import, clear, and corrupt-store preservation.
 
-The GitHub Actions workflow now runs XCTest and Xcode static analysis on macOS, archives with signing disabled, packages and inspects the IPA payload, and uploads an artifact explicitly labelled for ESign compatibility validation. The repository has no Git metadata or remote configured in this workspace, and this machine is Windows without Xcode; therefore the workflow, XCTest suite, archive, IPA structure, and ESign installation have not been executed here. These checks remain outstanding rather than passed.
+The GitHub Actions workflow runs XCTest and Xcode static analysis on macOS, archives with signing disabled, packages and inspects the IPA payload, and uploads an artifact explicitly labelled for ESign compatibility validation. Windows remains unsuitable for local Xcode builds; macOS CI is the build authority.
 
 ### Verification checklist for the next macOS runner execution
 
