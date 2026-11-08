@@ -124,7 +124,17 @@ struct ExerciseView: View {
         Card { VStack(alignment:.leading) { Text("Техника").font(.headline); TextEditor(text:Binding(get:{store.instructions[entry.exerciseID] ?? ""},set:{value in store.instructions[entry.exerciseID]=value;store.save()})).frame(minHeight:100) } }
     }
     private func historyCard(_ entry:ExerciseLog)->some View {
-        Card { VStack(alignment:.leading) { Text("Последние выполнения").font(.headline); ForEach(Array(store.records.flatMap(\.exercises).filter{$0.exerciseID==entry.exerciseID}.prefix(3))) { record in Text("\(record.name) · \(record.date.formatted(date:.abbreviated,time:.omitted))") } } }
+        let exerciseRecords = store.records.flatMap { $0.exercises }
+        let matchingRecords = exerciseRecords.filter { $0.exerciseID == entry.exerciseID }
+        let recentRecords = Array(matchingRecords.prefix(3))
+        return Card {
+            VStack(alignment: .leading) {
+                Text("Последние выполнения").font(.headline)
+                ForEach(recentRecords) { record in
+                    Text("\(record.name) · \(record.date.formatted(date: .abbreviated, time: .omitted))")
+                }
+            }
+        }
     }
     private func navigationButtons(_ session:Session)->some View {
         VStack(spacing:10) {
