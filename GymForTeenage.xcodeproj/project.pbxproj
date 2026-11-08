@@ -7,7 +7,7 @@
  A00000000000000000000001 /* App */ = { isa = PBXNativeTarget; buildConfigurationList = A00000000000000000000021; buildPhases = (A00000000000000000000031, A00000000000000000000032, A00000000000000000000033,); buildRules = (); dependencies = (); name = GymForTeenage; productName = GymForTeenage; productReference = A00000000000000000000051; productType = "com.apple.product-type.application"; };
  A00000000000000000000002 /* Tests */ = { isa = PBXNativeTarget; buildConfigurationList = A00000000000000000000022; buildPhases = (A00000000000000000000034, A00000000000000000000035,); buildRules = (); dependencies = (A00000000000000000000041,); name = GymForTeenageTests; productName = GymForTeenageTests; productReference = A00000000000000000000052; productType = "com.apple.product-type.bundle.unit-test"; };
  A00000000000000000000003 = {isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = 1; LastUpgradeCheck = 1600; TargetAttributes = {A00000000000000000000001 = {CreatedOnToolsVersion = 16.0;}; A00000000000000000000002 = {CreatedOnToolsVersion = 16.0; TestTargetID = A00000000000000000000001;};};}; buildConfigurationList = A00000000000000000000020; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; mainGroup = A00000000000000000000060; productRefGroup = A00000000000000000000061; projectDirPath = ""; projectRoot = ""; targets = (A00000000000000000000001, A00000000000000000000002,); };
- A00000000000000000000010 = {isa = PBXBuildFile; fileRef = A00000000000000000000070;};
+ A00000000000000000000010 = {isa = PBXBuildFile; fileRef = A00000000000000000000050;};
  A00000000000000000000011 = {isa = PBXBuildFile; fileRef = A00000000000000000000070;};
  A00000000000000000000012 = {isa = PBXBuildFile; fileRef = A00000000000000000000071;};
  A00000000000000000000013 = {isa = PBXBuildFile; fileRef = A00000000000000000000072;};
@@ -52,3 +52,4 @@
  };
  rootObject = A00000000000000000000003;
 }
+
