@@ -7,6 +7,7 @@ import json
 import unicodedata
 import plistlib
 import sys
+import zlib
 import zipfile
 from pathlib import Path
 
@@ -24,6 +25,24 @@ def check(condition: bool, message: str) -> None:
     if not condition:
         raise SystemExit(f"FAIL: {message}")
     print(f"PASS: {message}")
+
+
+def zip_name(info: zipfile.ZipInfo) -> str:
+    """Read Info-ZIP Unicode Path extra fields ignored by Python's zipfile."""
+    if info.flag_bits & 0x800:
+        return info.filename
+    original = info.filename.encode("cp437")
+    offset = 0
+    while offset + 4 <= len(info.extra):
+        field_id = int.from_bytes(info.extra[offset:offset + 2], "little")
+        field_size = int.from_bytes(info.extra[offset + 2:offset + 4], "little")
+        field = info.extra[offset + 4:offset + 4 + field_size]
+        if field_id == 0x7075 and len(field) >= 5 and field[0] == 1:
+            expected_crc = int.from_bytes(field[1:5], "little")
+            if zlib.crc32(original) == expected_crc:
+                return field[5:].decode("utf-8")
+        offset += 4 + field_size
+    return info.filename
 
 
 def validate_app(app_path: Path) -> dict:
@@ -56,7 +75,8 @@ def validate_catalog(repo: Path) -> None:
 
 def validate_ipa(ipa_path: Path, repo: Path) -> None:
     with zipfile.ZipFile(ipa_path) as archive:
-        names = archive.namelist()
+        entries = [(zip_name(info), info) for info in archive.infolist()]
+        names = [name for name, _ in entries]
         files = [name for name in names if not name.endswith("/")]
         check(any(name == APP_RELATIVE + "Info.plist" for name in files), "IPA contains Payload/GymForTeenage.app/Info.plist")
         app_infos = [name for name in files if name.endswith(".app/Info.plist")]
