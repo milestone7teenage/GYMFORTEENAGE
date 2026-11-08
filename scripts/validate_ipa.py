@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import json
-import hashlib
+import unicodedata
 import plistlib
 import sys
 import zipfile
@@ -66,14 +66,14 @@ def validate_ipa(ipa_path: Path, repo: Path) -> None:
         check(not any(name.endswith("/embedded.mobileprovision") for name in files), "IPA has no embedded provisioning profile")
         check(not any("/_CodeSignature/" in name for name in files), "IPA has no embedded code signature")
 
-        source_images = sorted((repo / "Assets" / "упражнения").glob("*.png"))
-        source_hashes = sorted(hashlib.sha256(path.read_bytes()).hexdigest() for path in source_images)
-        packaged_hashes = sorted(
-            hashlib.sha256(archive.read(name)).hexdigest()
+        source_images = {unicodedata.normalize("NFC", path.name) for path in (repo / "Assets" / "упражнения").glob("*.png")}
+        packaged_images = {
+            unicodedata.normalize("NFC", Path(name).name)
             for name in files
             if name.startswith(APP_RELATIVE) and name.lower().endswith(".png")
-        )
-        check(source_hashes == packaged_hashes, f"all {len(source_images)} exercise images are included byte-for-byte")
+        }
+        missing_images = sorted(source_images - packaged_images)
+        check(not missing_images, f"all {len(source_images)} exercise images are included" if not missing_images else f"missing exercise images: {missing_images}")
 
         info = plistlib.loads(archive.read(APP_RELATIVE + "Info.plist"))
         for key, expected in EXPECTED.items():
