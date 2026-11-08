@@ -105,7 +105,135 @@ struct ExerciseView: View {
             if value.translation.width < -60 { skipCurrent() }
         })
         .confirmationDialog("Выберите замену", isPresented: $showReplacement, titleVisibility: .visible) {
-            ForEach(Catalog.all.filter { struct ExerciseView:View { @Environment(Store.self) var store; @Environment(\.dismiss) private var dismiss; let workout:Training; let index:Int; @State private var technique=""; @State private var replace=false; @State private var showNext=false; var body:some View {let session=store.current(workout);let log=session.exercises[index];let ex=Catalog.e(log.actualID);ScrollView{VStack(spacing:16){Image(uiImage: exerciseUIImage(ex.image)).resizable().scaledToFit().frame(maxHeight:240).frame(maxWidth:.infinity).background(.background,in:RoundedRectangle(cornerRadius:20));Card{VStack(alignment:.leading){Text("Подходы").font(.headline);ForEach(Array(log.sets.enumerated()),id:\.element.id){j,set in HStack{Text("\(j+1)").frame(width:24);TextField("кг",text:Binding(get:{set.weight},set:{v in store.mutate{$0.exercises[index].sets[j].weight=v;if j==0 && $0.exercises[index].sets.count>1 && $0.exercises[index].sets[1].weight.isEmpty {$0.exercises[index].sets[1].weight=v}}})).keyboardType(.decimalPad).textFieldStyle(.roundedBorder);TextField("повторы",text:Binding(get:{set.reps},set:{v in store.mutate{$0.exercises[index].sets[j].reps=v}})).keyboardType(.numberPad).textFieldStyle(.roundedBorder);Button{store.mutate{$0.exercises[index].sets[j].skipped.toggle()}} label: {Image(systemName:set.skipped ? "xmark.circle.fill":"checkmark.circle")}.tint(set.skipped ? .red:.green)} };HStack{Button("+ Подход"){store.mutate{$0.exercises[index].sets.append(SetLog())}};if log.sets.count>2{Button("− последний"){store.mutate{$0.exercises[index].sets.removeLast()}}}}}};Card{VStack(alignment:.leading){Text("Техника").font(.headline);TextEditor(text:Binding(get:{store.instructions[log.exerciseID] ?? ""},set:{store.instructions[log.exerciseID]=$0;store.save()})).frame(minHeight:100)}};Card{VStack(alignment:.leading){Text("Последние выполнения").font(.headline);ForEach(store.records.flatMap{$0.exercises}.filter{$0.exerciseID==log.exerciseID}.prefix(3)){r in Text("\(r.name) · \(r.date.formatted(date:.abbreviated,time:.omitted))")}}};Button("Заменить упражнение"){replace=true}.buttonStyle(.bordered);Button(index+1<session.exercises.count ? "Далее":"К списку"){store.mutate{$0.exercises[index].status="completed";$0.current=min(index+1,$0.exercises.count-1)};if index+1<session.exercises.count{showNext=true}else{dismiss()}}.buttonStyle(.borderedProminent);Button("Пропустить свайпом →"){store.mutate{$0.exercises[index].status="skipped";$0.current=min(index+1,$0.exercises.count-1)};dismiss()}.font(.caption)}.padding()}.navigationTitle(ex.title).navigationDestination(isPresented:$showNext){ExerciseView(workout:workout,index:min(index+1,session.exercises.count-1))}.simultaneousGesture(DragGesture(minimumDistance:55).onEnded{v in if v.translation.width < -60 { store.mutate{$0.exercises[index].status="skipped";$0.current=min(index+1,$0.exercises.count-1)};dismiss() } }).confirmationDialog("Выберите замену",isPresented:$replace,titleVisibility:.visible){ForEach(Catalog.all.filter{$0.id != log.exerciseID}){item in Button(item.title){store.mutate{$0.exercises[index].actualID=item.id}}}} } }
+            ForEach(Catalog.all.filter { struct ExerciseView: View {
+    @Environment(Store.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    let workout: Training
+    let index: Int
+    @State private var showReplacement = false
+    @State private var showNext = false
+
+    var body: some View {
+        let session = store.current(workout)
+        let entry = session.exercises[index]
+        let exercise = Catalog.e(entry.actualID)
+        ScrollView {
+            VStack(spacing: 16) {
+                exerciseImage(exercise)
+                setsCard(entry)
+                instructionCard(entry)
+                historyCard(entry)
+                navigationButtons(session)
+            }.padding()
+        }
+        .navigationTitle(exercise.title)
+        .navigationDestination(isPresented: $showNext) {
+            ExerciseView(workout: workout, index: min(index + 1, session.exercises.count - 1))
+        }
+        .simultaneousGesture(DragGesture(minimumDistance: 55).onEnded { value in
+            if value.translation.width < -60 { skipCurrent() }
+        })
+        .confirmationDialog("Выберите замену", isPresented: $showReplacement, titleVisibility: .visible) {
+            ForEach(Catalog.all.filter { $0.id != entry.exerciseID }) { replacement in
+                Button(replacement.title) {
+                    store.mutate { $0.exercises[index].actualID = replacement.id }
+                }
+            }
+        }
+    }
+
+    private func exerciseImage(_ exercise: Exercise) -> some View {
+        Image(uiImage: exerciseUIImage(exercise.image))
+            .resizable().scaledToFit().frame(maxHeight: 240).frame(maxWidth: .infinity)
+            .background(.background, in: RoundedRectangle(cornerRadius: 20))
+    }
+
+    private func setsCard(_ entry: ExerciseLog) -> some View {
+        Card {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Подходы").font(.headline)
+                ForEach(Array(entry.sets.enumerated()), id: \.element.id) { row, set in
+                    setRow(set, row: row)
+                }
+                HStack {
+                    Button("+ Подход") { store.mutate { $0.exercises[index].sets.append(SetLog()) } }
+                    if entry.sets.count > 2 {
+                        Button("− последний") { store.mutate { $0.exercises[index].sets.removeLast() } }
+                    }
+                }
+            }
+        }
+    }
+
+    private func setRow(_ set: SetLog, row: Int) -> some View {
+        HStack {
+            Text("\(row + 1)").frame(width: 24)
+            TextField("кг", text: Binding(get: { set.weight }, set: { value in
+                store.mutate { state in
+                    state.exercises[index].sets[row].weight = value
+                    if row == 0, state.exercises[index].sets.count > 1,
+                       state.exercises[index].sets[1].weight.isEmpty {
+                        state.exercises[index].sets[1].weight = value
+                    }
+                }
+            })).keyboardType(.decimalPad).textFieldStyle(.roundedBorder)
+            TextField("повторы", text: Binding(get: { set.reps }, set: { value in
+                store.mutate { $0.exercises[index].sets[row].reps = value }
+            })).keyboardType(.numberPad).textFieldStyle(.roundedBorder)
+            Button {
+                store.mutate { $0.exercises[index].sets[row].skipped.toggle() }
+            } label: {
+                Image(systemName: set.skipped ? "xmark.circle.fill" : "checkmark.circle")
+            }.tint(set.skipped ? .red : .green)
+        }
+    }
+
+    private func instructionCard(_ entry: ExerciseLog) -> some View {
+        Card {
+            VStack(alignment: .leading) {
+                Text("Техника").font(.headline)
+                TextEditor(text: Binding(get: { store.instructions[entry.exerciseID] ?? "" }, set: { value in
+                    store.instructions[entry.exerciseID] = value
+                    store.save()
+                })).frame(minHeight: 100)
+            }
+        }
+    }
+
+    private func historyCard(_ entry: ExerciseLog) -> some View {
+        Card {
+            VStack(alignment: .leading) {
+                Text("Последние выполнения").font(.headline)
+                ForEach(Array(store.records.flatMap(\.exercises)
+                    .filter { $0.exerciseID == entry.exerciseID }.prefix(3))) { record in
+                    Text("\(record.name) · \(record.date.formatted(date: .abbreviated, time: .omitted))")
+                }
+            }
+        }
+    }
+
+    private func navigationButtons(_ session: Session) -> some View {
+        VStack(spacing: 10) {
+            Button("Заменить упражнение") { showReplacement = true }.buttonStyle(.bordered)
+            Button(index + 1 < session.exercises.count ? "Далее" : "К списку") {
+                store.mutate {
+                    $0.exercises[index].status = "completed"
+                    $0.current = min(index + 1, $0.exercises.count - 1)
+                }
+                if index + 1 < session.exercises.count { showNext = true } else { dismiss() }
+            }.buttonStyle(.borderedProminent)
+            Button("Пропустить") { skipCurrent() }.font(.caption)
+        }
+    }
+
+    private func skipCurrent() {
+        store.mutate {
+            $0.exercises[index].status = "skipped"
+            $0.current = min(index + 1, $0.exercises.count - 1)
+        }
+        dismiss()
+    }
+}
 struct ProgressView:View.id != entry.exerciseID }) { replacement in
                 Button(replacement.title) {
                     store.mutate { struct ExerciseView:View { @Environment(Store.self) var store; @Environment(\.dismiss) private var dismiss; let workout:Training; let index:Int; @State private var technique=""; @State private var replace=false; @State private var showNext=false; var body:some View {let session=store.current(workout);let log=session.exercises[index];let ex=Catalog.e(log.actualID);ScrollView{VStack(spacing:16){Image(uiImage: exerciseUIImage(ex.image)).resizable().scaledToFit().frame(maxHeight:240).frame(maxWidth:.infinity).background(.background,in:RoundedRectangle(cornerRadius:20));Card{VStack(alignment:.leading){Text("Подходы").font(.headline);ForEach(Array(log.sets.enumerated()),id:\.element.id){j,set in HStack{Text("\(j+1)").frame(width:24);TextField("кг",text:Binding(get:{set.weight},set:{v in store.mutate{$0.exercises[index].sets[j].weight=v;if j==0 && $0.exercises[index].sets.count>1 && $0.exercises[index].sets[1].weight.isEmpty {$0.exercises[index].sets[1].weight=v}}})).keyboardType(.decimalPad).textFieldStyle(.roundedBorder);TextField("повторы",text:Binding(get:{set.reps},set:{v in store.mutate{$0.exercises[index].sets[j].reps=v}})).keyboardType(.numberPad).textFieldStyle(.roundedBorder);Button{store.mutate{$0.exercises[index].sets[j].skipped.toggle()}} label: {Image(systemName:set.skipped ? "xmark.circle.fill":"checkmark.circle")}.tint(set.skipped ? .red:.green)} };HStack{Button("+ Подход"){store.mutate{$0.exercises[index].sets.append(SetLog())}};if log.sets.count>2{Button("− последний"){store.mutate{$0.exercises[index].sets.removeLast()}}}}}};Card{VStack(alignment:.leading){Text("Техника").font(.headline);TextEditor(text:Binding(get:{store.instructions[log.exerciseID] ?? ""},set:{store.instructions[log.exerciseID]=$0;store.save()})).frame(minHeight:100)}};Card{VStack(alignment:.leading){Text("Последние выполнения").font(.headline);ForEach(store.records.flatMap{$0.exercises}.filter{$0.exerciseID==log.exerciseID}.prefix(3)){r in Text("\(r.name) · \(r.date.formatted(date:.abbreviated,time:.omitted))")}}};Button("Заменить упражнение"){replace=true}.buttonStyle(.bordered);Button(index+1<session.exercises.count ? "Далее":"К списку"){store.mutate{$0.exercises[index].status="completed";$0.current=min(index+1,$0.exercises.count-1)};if index+1<session.exercises.count{showNext=true}else{dismiss()}}.buttonStyle(.borderedProminent);Button("Пропустить свайпом →"){store.mutate{$0.exercises[index].status="skipped";$0.current=min(index+1,$0.exercises.count-1)};dismiss()}.font(.caption)}.padding()}.navigationTitle(ex.title).navigationDestination(isPresented:$showNext){ExerciseView(workout:workout,index:min(index+1,session.exercises.count-1))}.simultaneousGesture(DragGesture(minimumDistance:55).onEnded{v in if v.translation.width < -60 { store.mutate{$0.exercises[index].status="skipped";$0.current=min(index+1,$0.exercises.count-1)};dismiss() } }).confirmationDialog("Выберите замену",isPresented:$replace,titleVisibility:.visible){ForEach(Catalog.all.filter{$0.id != log.exerciseID}){item in Button(item.title){store.mutate{$0.exercises[index].actualID=item.id}}}} } }
@@ -234,5 +362,7 @@ func exerciseUIImage(_ name:String)->UIImage {
  if let path=Bundle.main.path(forResource:name,ofType:"png"), let image=UIImage(contentsOfFile:path) { return image }
  return UIImage(systemName:"figure.strengthtraining.traditional") ?? UIImage()
 }
+
+
 
 
