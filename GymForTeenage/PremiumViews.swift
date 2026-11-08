@@ -228,7 +228,17 @@ struct PremiumStatisticsView: View {
         return TeenCard(accent: tint) { VStack(alignment: .leading, spacing: 12) { TeenSectionTitle(title, detail: "12 месяцев"); if values.isEmpty { TeenEmpty(icon: kind == "weight" ? "scalemass" : "ruler", title: "Нет измерений", detail: "Добавь \(title), чтобы увидеть настоящую динамику.") } else { Chart(values) { value in AreaMark(x: .value("Дата", value.date), y: .value("Значение", value.value)).foregroundStyle(LinearGradient(colors: [tint.opacity(0.35), .clear], startPoint: .top, endPoint: .bottom)); LineMark(x: .value("Дата", value.date), y: .value("Значение", value.value)).foregroundStyle(tint).lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round)); PointMark(x: .value("Дата", value.date), y: .value("Значение", value.value)).foregroundStyle(tint) }.frame(height: 170).chartYAxis { AxisMarks(position: .leading) } } } }
     }
     private func count(_ component: Calendar.Component) -> Int { let now = Date(); let start = Calendar.current.dateInterval(of: component, for: now)?.start ?? now; return store.records.filter { $0.date >= start }.count }
-    private var bestDay: String? { Dictionary(grouping: store.records) { Calendar.current.startOfDay(for: $0.date) }.map { ($0.key, $0.value.reduce(0.0) { $0 + Metrics.tonnage($1.exercises) }) }.filter { $0.1 > 0 }.sorted { $0.1 == $1.1 ? $0.0 < $1.0 : $0.1 > $1.1 }.first.map { $0.0.formatted(date: .abbreviated, time: .omitted) } }
+    private var bestDay: String? {
+        let grouped = Dictionary(grouping: store.records) { Calendar.current.startOfDay(for: $0.date) }
+        let totals: [(date: Date, load: Double)] = grouped.map { date, records in
+            let load = records.reduce(0.0) { partial, record in partial + Metrics.tonnage(record.exercises) }
+            return (date, load)
+        }
+        let ranked = totals.filter { $0.load > 0 }.sorted { left, right in
+            left.load == right.load ? left.date < right.date : left.load > right.load
+        }
+        return ranked.first?.date.formatted(date: .abbreviated, time: .omitted)
+    }
     private func waterDays() -> [WaterDay] { (0..<7).compactMap { offset in guard let date = Calendar.current.date(byAdding: .day, value: offset - 6, to: Date()) else { return nil }; let formatter = DateFormatter(); formatter.dateFormat = "yyyy-MM-dd"; formatter.timeZone = .current; let day = formatter.string(from: date); return store.water.first { $0.day == day } ?? WaterDay(day: day, ml: 0) } }
 }
 
