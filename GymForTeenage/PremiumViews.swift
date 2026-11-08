@@ -154,7 +154,23 @@ struct PremiumExerciseView: View {
     private func actionRow(_ entry: ExerciseLog) -> some View { HStack(spacing: 10) { Button { replace = true } label: { action("Заменить", icon: "arrow.triangle.2.circlepath") }; NavigationLink { PremiumHistoryView(exerciseID: entry.exerciseID) } label: { action("История", icon: "clock.arrow.circlepath") } } }
     private func action(_ text: String, icon: String) -> some View { VStack(spacing: 6) { Image(systemName: icon); Text(text).font(.caption2.weight(.semibold)) }.foregroundStyle(.white).frame(maxWidth: .infinity).padding(.vertical, 12).background(TeenTheme.surface, in: RoundedRectangle(cornerRadius: 16)).overlay(RoundedRectangle(cornerRadius: 16).stroke(TeenTheme.line)) }
     private func notes(_ entry: ExerciseLog) -> some View { TeenCard { VStack(alignment: .leading, spacing: 8) { Text("Заметка и техника").font(.headline); TextEditor(text: Binding(get: { store.instructions[entry.exerciseID] ?? "" }, set: { store.instructions[entry.exerciseID] = $0; store.save() })).scrollContentBackground(.hidden).frame(minHeight: 88).padding(6).background(TeenTheme.raised, in: RoundedRectangle(cornerRadius: 14)) } } }
-    private func history(_ entry: ExerciseLog) -> some View { let recent = store.records.filter { $0.exercises.contains { $0.exerciseID == entry.exerciseID } }.prefix(3); return TeenCard { VStack(alignment: .leading, spacing: 8) { Text("Последние выполнения").font(.headline); if recent.isEmpty { Text("История появится после первой тренировки").font(.caption).foregroundStyle(TeenTheme.muted) } else { ForEach(Array(recent)) { Text("\($0.name) · \($0.date.formatted(date: .abbreviated, time: .omitted))").font(.caption).foregroundStyle(TeenTheme.muted) } } } }
+    private func history(_ entry: ExerciseLog) -> some View {
+        let recent = store.records.filter { record in
+            record.exercises.contains { $0.exerciseID == entry.exerciseID }
+        }.prefix(3)
+        return TeenCard {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Последние выполнения").font(.headline)
+                if recent.isEmpty {
+                    Text("История появится после первой тренировки").font(.caption).foregroundStyle(TeenTheme.muted)
+                } else {
+                    ForEach(Array(recent)) { record in
+                        Text("\(record.name) · \(record.date.formatted(date: .abbreviated, time: .omitted))").font(.caption).foregroundStyle(TeenTheme.muted)
+                    }
+                }
+            }
+        }
+    }
     private func advance(_ session: Session) { store.mutate { $0.exercises[index].status = "completed"; $0.current = min(index + 1, $0.exercises.count - 1) }; dismiss() }
     private func skip() { store.mutate { $0.exercises[index].status = "skipped"; $0.current = min(index + 1, $0.exercises.count - 1) }; dismiss() }
 }
@@ -183,19 +199,34 @@ struct PremiumStatisticsView: View {
     @Environment(Store.self) private var store
     @State private var selectedWorkout = "w1"
     var body: some View {
-        NavigationStack { ScrollView(showsIndicators: false) { VStack(spacing: 16) {
-            HStack { VStack(alignment: .leading, spacing: 4) { Text("статистика").font(.system(.largeTitle, design: .rounded, weight: .bold)); Text("Реальные данные за твой период").font(.subheadline).foregroundStyle(TeenTheme.muted) }; Spacer() }
-            frequency
-            comparison
-            water
-            measures(kind: "weight", title: "вес", tint: TeenTheme.violet)
-            measures(kind: "height", title: "рост", tint: TeenTheme.ice)
-        }.padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 112) }.toolbar(.hidden, for: .navigationBar) }
+        NavigationStack {
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 16) {
+                    HStack { VStack(alignment: .leading, spacing: 4) { Text("статистика").font(.system(.largeTitle, design: .rounded, weight: .bold)); Text("Реальные данные за твой период").font(.subheadline).foregroundStyle(TeenTheme.muted) }; Spacer() }
+                    frequency
+                    comparison
+                    water
+                    measureChart(kind: "weight", title: "вес", tint: TeenTheme.violet)
+                    measureChart(kind: "height", title: "рост", tint: TeenTheme.ice)
+                }.padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 112)
+            }.toolbar(.hidden, for: .navigationBar)
+        }
     }
-    private var frequency: some View { TeenCard(accent: TeenTheme.lime) { HStack(spacing: 10) { TeenMetric(title: "неделя", value: "\(count(.weekOfYear))", icon: "calendar", tint: TeenTheme.lime); TeenMetric(title: "месяц", value: "\(count(.month))", icon: "calendar.badge.clock", tint: TeenTheme.violet); VStack(alignment: .leading, spacing: 5) { Text("Лучший день").font(.caption).foregroundStyle(TeenTheme.muted); Text(bestDay ?? "Пока нет").font(.subheadline.weight(.bold)); Text("по тоннажу").font(.caption2).foregroundStyle(TeenTheme.muted) }.frame(maxWidth: .infinity) } } }
-    private var comparison: some View { let records = Array(store.records.filter { $0.workoutID == selectedWorkout }.prefix(6).reversed()); return TeenCard(accent: TeenTheme.violet) { VStack(alignment: .leading, spacing: 12) { TeenSectionTitle("сравнение тренировок"); Picker("Тренировка", selection: $selectedWorkout) { ForEach(Catalog.workouts) { Text($0.title).tag($0.id) } }.pickerStyle(.segmented); if records.isEmpty { TeenEmpty(icon: "chart.xyaxis.line", title: "Ещё нет сравнений", detail: "После завершения тренировок здесь появятся реальные линии нагрузки.") } else { Chart(records) { record in LineMark(x: .value("Дата", record.date), y: .value("Тоннаж", Metrics.tonnage(record.exercises))).foregroundStyle(TeenTheme.violet).lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round)); PointMark(x: .value("Дата", record.date), y: .value("Тоннаж", Metrics.tonnage(record.exercises))).foregroundStyle(TeenTheme.lime) }.frame(height: 180).chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }.chartYAxis { AxisMarks(position: .leading) } } } }
-    private var water: some View { let days = waterDays(); return TeenCard(accent: TeenTheme.ice) { VStack(alignment: .leading, spacing: 12) { TeenSectionTitle("вода", detail: "7 дней"); Chart(days, id: \.day) { day in BarMark(x: .value("День", String(day.day.suffix(2))), y: .value("Мл", day.ml)).foregroundStyle(day.day == store.today ? TeenTheme.ice : TeenTheme.ice.opacity(0.35)).cornerRadius(5).annotation(position: .top) { if day.ml > 0 { Text("\(day.ml)").font(.caption2).foregroundStyle(TeenTheme.muted) } } }.frame(height: 170).chartYAxis { AxisMarks(position: .leading) } } }
-    private func measures(kind: String, title: String, tint: Color) -> some View { let values = store.measures.filter { $0.kind == kind && $0.date >= Calendar.current.date(byAdding: .month, value: -12, to: Date())! }.sorted { $0.date < $1.date }; return TeenCard(accent: tint) { VStack(alignment: .leading, spacing: 12) { TeenSectionTitle(title, detail: "12 месяцев"); if values.isEmpty { TeenEmpty(icon: kind == "weight" ? "scalemass" : "ruler", title: "Нет измерений", detail: "Добавь \(title), чтобы увидеть настоящую динамику.") } else { Chart(values) { value in AreaMark(x: .value("Дата", value.date), y: .value("Значение", value.value)).foregroundStyle(LinearGradient(colors: [tint.opacity(0.35), .clear], startPoint: .top, endPoint: .bottom)); LineMark(x: .value("Дата", value.date), y: .value("Значение", value.value)).foregroundStyle(tint).lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round)); PointMark(x: .value("Дата", value.date), y: .value("Значение", value.value)).foregroundStyle(tint) }.frame(height: 170).chartYAxis { AxisMarks(position: .leading) } } } }
+    private var frequency: some View {
+        TeenCard(accent: TeenTheme.lime) { HStack(spacing: 10) { TeenMetric(title: "неделя", value: "\(count(.weekOfYear))", icon: "calendar", tint: TeenTheme.lime); TeenMetric(title: "месяц", value: "\(count(.month))", icon: "calendar.badge.clock", tint: TeenTheme.violet); VStack(alignment: .leading, spacing: 5) { Text("Лучший день").font(.caption).foregroundStyle(TeenTheme.muted); Text(bestDay ?? "Пока нет").font(.subheadline.weight(.bold)); Text("по тоннажу").font(.caption2).foregroundStyle(TeenTheme.muted) }.frame(maxWidth: .infinity) } }
+    }
+    private var comparison: some View {
+        let records = Array(store.records.filter { $0.workoutID == selectedWorkout }.prefix(6).reversed())
+        return TeenCard(accent: TeenTheme.violet) { VStack(alignment: .leading, spacing: 12) { TeenSectionTitle("сравнение тренировок"); Picker("Тренировка", selection: $selectedWorkout) { ForEach(Catalog.workouts) { Text($0.title).tag($0.id) } }.pickerStyle(.segmented); if records.isEmpty { TeenEmpty(icon: "chart.xyaxis.line", title: "Ещё нет сравнений", detail: "После завершения тренировок здесь появятся реальные линии нагрузки.") } else { Chart(records) { record in LineMark(x: .value("Дата", record.date), y: .value("Тоннаж", Metrics.tonnage(record.exercises))).foregroundStyle(TeenTheme.violet).lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round)); PointMark(x: .value("Дата", record.date), y: .value("Тоннаж", Metrics.tonnage(record.exercises))).foregroundStyle(TeenTheme.lime) }.frame(height: 180).chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }.chartYAxis { AxisMarks(position: .leading) } } } }
+    }
+    private var water: some View {
+        let days = waterDays()
+        return TeenCard(accent: TeenTheme.ice) { VStack(alignment: .leading, spacing: 12) { TeenSectionTitle("вода", detail: "7 дней"); Chart(days, id: \.day) { day in BarMark(x: .value("День", String(day.day.suffix(2))), y: .value("Мл", day.ml)).foregroundStyle(day.day == store.today ? TeenTheme.ice : TeenTheme.ice.opacity(0.35)).cornerRadius(5).annotation(position: .top) { if day.ml > 0 { Text("\(day.ml)").font(.caption2).foregroundStyle(TeenTheme.muted) } } }.frame(height: 170).chartYAxis { AxisMarks(position: .leading) } } }
+    }
+    private func measureChart(kind: String, title: String, tint: Color) -> some View {
+        let values = store.measures.filter { $0.kind == kind && $0.date >= Calendar.current.date(byAdding: .month, value: -12, to: Date())! }.sorted { $0.date < $1.date }
+        return TeenCard(accent: tint) { VStack(alignment: .leading, spacing: 12) { TeenSectionTitle(title, detail: "12 месяцев"); if values.isEmpty { TeenEmpty(icon: kind == "weight" ? "scalemass" : "ruler", title: "Нет измерений", detail: "Добавь \(title), чтобы увидеть настоящую динамику.") } else { Chart(values) { value in AreaMark(x: .value("Дата", value.date), y: .value("Значение", value.value)).foregroundStyle(LinearGradient(colors: [tint.opacity(0.35), .clear], startPoint: .top, endPoint: .bottom)); LineMark(x: .value("Дата", value.date), y: .value("Значение", value.value)).foregroundStyle(tint).lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round)); PointMark(x: .value("Дата", value.date), y: .value("Значение", value.value)).foregroundStyle(tint) }.frame(height: 170).chartYAxis { AxisMarks(position: .leading) } } } }
+    }
     private func count(_ component: Calendar.Component) -> Int { let now = Date(); let start = Calendar.current.dateInterval(of: component, for: now)?.start ?? now; return store.records.filter { $0.date >= start }.count }
     private var bestDay: String? { Dictionary(grouping: store.records) { Calendar.current.startOfDay(for: $0.date) }.map { ($0.key, $0.value.reduce(0.0) { $0 + Metrics.tonnage($1.exercises) }) }.filter { $0.1 > 0 }.sorted { $0.1 == $1.1 ? $0.0 < $1.0 : $0.1 > $1.1 }.first.map { $0.0.formatted(date: .abbreviated, time: .omitted) } }
     private func waterDays() -> [WaterDay] { (0..<7).compactMap { offset in guard let date = Calendar.current.date(byAdding: .day, value: offset - 6, to: Date()) else { return nil }; let formatter = DateFormatter(); formatter.dateFormat = "yyyy-MM-dd"; formatter.timeZone = .current; let day = formatter.string(from: date); return store.water.first { $0.day == day } ?? WaterDay(day: day, ml: 0) } }
