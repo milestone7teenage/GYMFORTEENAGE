@@ -35,11 +35,61 @@ import XCTest
   let exported=try XCTUnwrap(s.export());let backup=try JSONDecoder.iso.decode(Backup.self,from:Data(contentsOf:exported));XCTAssertEqual(backup.version,1);XCTAssertEqual(backup.measures.count,2);try? FileManager.default.removeItem(at:exported)
   s.clear();let restored=Store(fileURL:url);XCTAssertTrue(restored.measures.isEmpty);XCTAssertTrue(restored.water.count<=7)
  }
- func testUnsupportedVersionImportDoesNotReplaceCurrentData() throws {
-  let url=tempURL();defer{try? FileManager.default.removeItem(at:url)};let s=Store(fileURL:url);s.measures=[Measure(kind:"weight",value:72)];s.save();let before=try Data(contentsOf:url)
-  var b=Backup(records:[],measures:[],water:[],session:nil,instructions:[:],reminders:false);b.version=99;let data=try JSONEncoder.pretty.encode(b)
-  XCTAssertThrowsError(try s.restore(data));XCTAssertEqual(s.measures.first?.value,72);XCTAssertEqual(try Data(contentsOf:url),before)
- }
+func testUnsupportedVersionImportDoesNotReplaceCurrentData() throws {
+   let url=tempURL();defer{try? FileManager.default.removeItem(at:url)};let s=Store(fileURL:url);s.measures=[Measure(kind:"weight",value:72)];s.save();let before=try Data(contentsOf:url)
+   var b=Backup(records:[],measures:[],water:[],session:nil,instructions:[:],reminders:false);b.version=99;let data=try JSONEncoder.pretty.encode(b)
+   XCTAssertThrowsError(try s.restore(data));XCTAssertEqual(s.measures.first?.value,72);XCTAssertEqual(try Data(contentsOf:url),before)
+  }
+  func testRecoverExerciseRestoresSkippedAndPreservesSets() throws {
+   let url=tempURL();defer{try? FileManager.default.removeItem(at:url)};let s=Store(fileURL:url);let workout=Catalog.workouts[0];s.current(workout)
+   s.mutate { state in state.exercises[0].status="skipped"; state.exercises[0].sets[0].weight="50"; state.exercises[0].sets[0].reps="5" }
+   s.recoverExercise(at: 0)
+   XCTAssertEqual(s.session?.exercises[0].status,"pending")
+   XCTAssertEqual(s.session?.exercises[0].sets[0].weight,"50")
+   XCTAssertEqual(s.session?.exercises[0].sets[0].reps,"5")
+   XCTAssertEqual(s.session?.current,0)
+  }
+  func testRecoverExerciseDoesNotDuplicate() throws {
+   let url=tempURL();defer{try? FileManager.default.removeItem(at:url)};let s=Store(fileURL:url);let workout=Catalog.workouts[0];s.current(workout)
+   s.mutate { state in state.exercises[0].status="skipped" }
+   s.recoverExercise(at: 0)
+   s.recoverExercise(at: 0)
+   XCTAssertEqual(s.session?.exercises.count,workout.exercises.count)
+   XCTAssertEqual(s.session?.exercises[0].status,"pending")
+  }
+  func testCreatineTogglePersistsAndResetsOnNewDay() throws {
+   let url=tempURL();defer{try? FileManager.default.removeItem(at:url)};let s=Store(fileURL:url)
+   s.creatineToggle()
+   XCTAssertTrue(s.todayCreatine)
+   let reopened=Store(fileURL:url)
+   XCTAssertTrue(reopened.todayCreatine)
+   let yesterday=Calendar.current.date(byAdding:.day,value:-1,to:Date())!
+   let yesterdayKey=Store.dayKey(yesterday)
+   reopened.creatineLog[yesterdayKey]=false
+   reopened.creatineLog[reopened.today]=true
+   reopened.save()
+   let next=Store(fileURL:url)
+   XCTAssertEqual(next.todayCreatine,true)
+   XCTAssertEqual(next.creatineLog[yesterdayKey],false)
+  }
+  func testCreatineHistorySurvivesRestart() throws {
+   let url=tempURL();defer{try? FileManager.default.removeItem(at:url)};let s=Store(fileURL:url)
+   let yesterday=Calendar.current.date(byAdding:.day,value:-1,to:Date())!
+   let yk=Store.dayKey(yesterday)
+   s.creatineLog[yk]=true
+   s.creatineLog[s.today]=false
+   s.save()
+   let reopened=Store(fileURL:url)
+   XCTAssertEqual(reopened.creatineLog[yk],true)
+   XCTAssertEqual(reopened.creatineLog[s.today],false)
+  }
+  func testSkippedExerciseStatusPersists() throws {
+   let url=tempURL();defer{try? FileManager.default.removeItem(at:url)};let s=Store(fileURL:url);let workout=Catalog.workouts[0];s.current(workout)
+   s.mutate { state in state.exercises[0].status="skipped"; state.exercises[0].sets[0].weight="30" }
+   let reopened=Store(fileURL:url)
+   XCTAssertEqual(reopened.session?.exercises[0].status,"skipped")
+   XCTAssertEqual(reopened.session?.exercises[0].sets[0].weight,"30")
+  }
 }
 
 

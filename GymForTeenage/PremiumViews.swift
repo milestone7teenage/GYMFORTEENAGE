@@ -67,6 +67,8 @@ struct PremiumHomeView: View {
                     ForEach(Catalog.workouts) { workout in workoutCard(workout) }
                     TeenSectionTitle("вода сегодня", detail: "цель 3 000 мл")
                     waterCard
+                    TeenSectionTitle("креатин сегодня", detail: "ежедневная отметка")
+                    creatineCard
                 }
                 .padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 112)
             }
@@ -85,13 +87,15 @@ struct PremiumHomeView: View {
     private func measureCard(_ title: String, unit: String, kind: String, icon: String, tint: Color) -> some View {
         Button { self.kind = kind; value = ""; showMeasure = true } label: {
             TeenCard(accent: tint) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Image(systemName: icon).foregroundStyle(tint)
-                    Spacer(minLength: 4)
-                    Text(latest(kind).map { "\($0.value.formatted(.number.precision(.fractionLength(0...1))))" } ?? "—").font(.system(.title, design: .rounded, weight: .bold)).monospacedDigit().frame(maxWidth: .infinity, alignment: .center)
-                    Text("\(title) · \(unit)").font(.caption.weight(.medium)).foregroundStyle(TeenTheme.muted).frame(maxWidth: .infinity, alignment: .center)
+                HStack(spacing: 12) {
+                    Image(systemName: icon).foregroundStyle(tint).font(.title3)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(latest(kind).map { "\($0.value.formatted(.number.precision(.fractionLength(0...1))))" } ?? "—").font(.system(.title3, design: .rounded, weight: .bold)).monospacedDigit()
+                        Text("\(title) · \(unit)").font(.caption2.weight(.medium)).foregroundStyle(TeenTheme.muted)
+                    }
+                    Spacer()
                 }
-                .frame(maxWidth: .infinity).frame(height: 142, alignment: .leading)
+                .frame(maxWidth: .infinity).frame(height: 72, alignment: .leading)
             }.frame(maxWidth: .infinity)
         }.buttonStyle(TeenPressStyle())
     }
@@ -115,6 +119,35 @@ struct PremiumHomeView: View {
             }
         }
     }
+    private var creatineCard: some View {
+        TeenCard(accent: store.todayCreatine ? TeenTheme.lime : TeenTheme.raised) {
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle().stroke(store.todayCreatine ? TeenTheme.lime : TeenTheme.raised, lineWidth: 2)
+                    Image(systemName: store.todayCreatine ? "checkmark" : "pill")
+                        .foregroundStyle(store.todayCreatine ? TeenTheme.ink : TeenTheme.muted)
+                        .font(.title3)
+                }
+                .frame(width: 44, height: 44)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Принять креатин").font(.subheadline.weight(.semibold))
+                    Text(store.todayCreatine ? "Сегодня отмечено" : "Не отмечено").font(.caption2).foregroundStyle(TeenTheme.muted)
+                }
+                Spacer()
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        store.creatineToggle()
+                    }
+                } label: {
+                    Image(systemName: store.todayCreatine ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(store.todayCreatine ? TeenTheme.lime : TeenTheme.muted)
+                        .font(.title2)
+                }
+                .buttonStyle(TeenPressStyle())
+            }
+            .padding(.vertical, 4)
+        }
+    }
     private var measureSheet: some View {
         NavigationStack { ZStack { TeenTheme.ink.ignoresSafeArea(); VStack(spacing: 18) { Text(kind == "weight" ? "Новый вес" : "Новый рост").font(.title2.bold()); TextField(kind == "weight" ? "кг" : "см", text: $value).keyboardType(.decimalPad).font(.system(.title, design: .rounded)).multilineTextAlignment(.center).padding().background(TeenTheme.surface, in: RoundedRectangle(cornerRadius: 18)); Button("Сохранить") { if let input = Double(value.replacingOccurrences(of: ",", with: ".")), input > 0 { store.measures.append(.init(kind: kind, value: input)); store.save() }; showMeasure = false }.buttonStyle(.borderedProminent).tint(TeenTheme.lime) }.padding(24) }.toolbar { ToolbarItem(placement: .cancellationAction) { Button("Отмена") { showMeasure = false } } } }
     }
@@ -123,13 +156,34 @@ struct PremiumHomeView: View {
 struct PremiumWorkoutView: View {
     @Environment(Store.self) private var store
     let workout: Training
+    @State private var showRecovery = false
     var body: some View {
         let session = store.current(workout)
         ScrollView { VStack(spacing: 14) {
             TeenCard(accent: TeenTheme.lime) { HStack { VStack(alignment: .leading, spacing: 5) { Text(workout.title).font(.title2.bold()); Text("\(session.exercises.filter { $0.status == "completed" }.count) из \(session.exercises.count) упражнений").foregroundStyle(TeenTheme.muted).font(.caption) }; Spacer(); ZStack { Circle().stroke(TeenTheme.raised, lineWidth: 6); Circle().trim(from: 0, to: Double(session.exercises.filter { $0.status == "completed" || $0.status == "skipped" }.count) / Double(session.exercises.count)).stroke(TeenTheme.lime, style: StrokeStyle(lineWidth: 6, lineCap: .round)).rotationEffect(.degrees(-90)); Text("\(session.current + 1)").font(.headline) }.frame(width: 50, height: 50) } }
+            if let skipped = session.exercises.enumerated().filter({ $0.element.status == "skipped" }).first {
+                Button { showRecovery = true } label: {
+                    HStack {
+                        Image(systemName: "arrow.counterclockwise")
+                        Text("Вернуть пропущенное")
+                    }.font(.subheadline.weight(.semibold)).foregroundStyle(TeenTheme.lime)
+                        .frame(maxWidth: .infinity).padding(.vertical, 10)
+                        .background(TeenTheme.lime.opacity(0.12), in: Capsule())
+                }.buttonStyle(TeenPressStyle())
+            }
             ForEach(Array(session.exercises.enumerated()), id: \.element.id) { index, entry in NavigationLink { PremiumExerciseView(workout: workout, index: index) } label: { exerciseRow(entry, index: index) }.buttonStyle(TeenPressStyle()) }
             Button { store.finish() } label: { Text("Завершить тренировку").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 15).foregroundStyle(TeenTheme.ink).background(TeenTheme.lime, in: Capsule()) }.buttonStyle(TeenPressStyle())
         }.padding(20).padding(.bottom, 120) }.background(TeenTheme.ink).navigationBarTitleDisplayMode(.inline).toolbar { ToolbarItem(placement: .principal) { Text(workout.title.uppercased()).font(.caption.weight(.bold)) } }
+        .confirmationDialog("Восстановить пропущенное упражнение?", isPresented: $showRecovery, titleVisibility: .visible) {
+            ForEach(Array(session.exercises.enumerated()), id: \.element.id) { idx, entry in
+                if entry.status == "skipped" {
+                    Button("Вернуть \"\(Catalog.e(entry.actualID).title)\"") {
+                        store.recoverExercise(at: idx)
+                    }
+                }
+            }
+            Button("Отмена", role: .cancel) {}
+        } message: { Text("Упражнение вернётся на своё место в тренировке, все значения сохранятся.") }
     }
     private func exerciseRow(_ entry: ExerciseLog, index: Int) -> some View { TeenCard(accent: entry.status == "completed" ? TeenTheme.lime : nil) { HStack(spacing: 13) { Image(uiImage: exerciseUIImage(Catalog.e(entry.actualID).image)).resizable().scaledToFill().frame(width: 54, height: 54).clipShape(Circle()); VStack(alignment: .leading, spacing: 4) { Text(Catalog.e(entry.actualID).title).font(.subheadline.weight(.semibold)); Text(entry.status == "skipped" ? "Пропущено" : "Упражнение \(index + 1)").font(.caption).foregroundStyle(entry.status == "skipped" ? .red : TeenTheme.muted) }; Spacer(); Image(systemName: entry.status == "completed" ? "checkmark.circle.fill" : "chevron.right").foregroundStyle(entry.status == "completed" ? TeenTheme.lime : TeenTheme.muted) } } }
 }
@@ -140,17 +194,60 @@ struct PremiumExerciseView: View {
     let workout: Training
     let index: Int
     @State private var replace = false
+    @State private var dragOffset: CGFloat = 0
+    @State private var showingSkipUndo = false
+    private let skipThreshold: CGFloat = -80
+    private let minimumDrag: CGFloat = 55
     var body: some View {
         let session = store.current(workout); let entry = session.exercises[index]; let exercise = Catalog.e(entry.actualID)
-        ScrollView { VStack(spacing: 16) { hero(exercise, session: session); setCard(entry); actionRow(entry); notes(entry); history(entry); Button(index + 1 < session.exercises.count ? "Сохранить и далее" : "К списку") { advance(session) }.font(.headline).frame(maxWidth: .infinity).padding(.vertical, 15).foregroundStyle(TeenTheme.ink).background(TeenTheme.lime, in: Capsule()).buttonStyle(TeenPressStyle()); Button("Пропустить упражнение") { skip() }.font(.caption.weight(.medium)).foregroundStyle(.red) }.padding(20).padding(.bottom, 120) }
+        ScrollView { VStack(spacing: 16) { hero(exercise, session: session); setCard(entry); actionRow(entry); notes(entry); history(entry); Button(index + 1 < session.exercises.count ? "Сохранить и далее" : "К списку") { advance(session) }.font(.headline).frame(maxWidth: .infinity).padding(.vertical, 15).foregroundStyle(TeenTheme.ink).background(TeenTheme.lime, in: Capsule()).buttonStyle(TeenPressStyle()); Button(entry.status == "skipped" ? "Вернуть упражнение" : "Пропустить упражнение") { if entry.status == "skipped" { recover() } else { skip() } }.font(.caption.weight(.medium)).foregroundStyle(entry.status == "skipped" ? TeenTheme.lime : .red) }.padding(20).padding(.bottom, 120) }
             .background(TeenTheme.ink)
             .navigationBarTitleDisplayMode(.inline)
-            .simultaneousGesture(DragGesture(minimumDistance: 55).onEnded { if $0.translation.width < -60 { skip() } })
+            .offset(x: dragOffset)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: minimumDrag)
+                    .onChanged { value in
+                        let translation = value.translation.width
+                        if translation < 0 && abs(translation) > 10 {
+                            dragOffset = max(translation, skipThreshold)
+                        }
+                    }
+                    .onEnded { value in
+                        if value.translation.width < skipThreshold {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                dragOffset = 0
+                            }
+                            skip()
+                        } else {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                dragOffset = 0
+                            }
+                        }
+                    }
+            )
+            .overlay(
+                HStack {
+                    Spacer()
+                    if dragOffset < -20 {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.red)
+                            .font(.title2)
+                            .padding(.trailing, 20)
+                    }
+                }
+            )
             .confirmationDialog("Заменить упражнение", isPresented: $replace) {
                 ForEach(Catalog.all.filter { $0.id != entry.exerciseID }) { item in
                     Button(item.title) { store.mutate { $0.exercises[index].actualID = item.id } }
                 }
             }
+            .alert("Упражнение пропущено", isPresented: $showingSkipUndo) {
+                Button("Отменить пропуск") {
+                    store.recoverExercise(at: index)
+                    showingSkipUndo = false
+                }
+                Button("ОК", role: .cancel) {}
+            } message: { Text("Вы можете вернуть это упражнение позже в списке тренировки") }
     }
     private func hero(_ exercise: Exercise, session: Session) -> some View { TeenCard(accent: TeenTheme.lime) { VStack(spacing: 12) { ZStack { Circle().stroke(TeenTheme.raised, lineWidth: 6); Circle().trim(from: 0, to: Double(index + 1) / Double(session.exercises.count)).stroke(TeenTheme.lime, style: StrokeStyle(lineWidth: 6, lineCap: .round)).rotationEffect(.degrees(-90)); Image(uiImage: exerciseUIImage(exercise.image)).resizable().scaledToFill().frame(width: 92, height: 92).clipShape(Circle()) }.frame(width: 108, height: 108); Text(exercise.title.uppercased()).font(.headline).multilineTextAlignment(.center); Text("Тренировка · упражнение \(index + 1)").font(.caption).foregroundStyle(TeenTheme.muted) } .frame(maxWidth: .infinity) } }
     private func setCard(_ entry: ExerciseLog) -> some View { TeenCard { VStack(alignment: .leading, spacing: 12) { TeenSectionTitle("подходы", detail: "вес · повторы"); ForEach(entry.sets.indices, id: \.self) { row in setRow(entry.sets[row], row: row) }; HStack { Button { store.mutate { $0.exercises[index].sets.append(SetLog()) } } label: { Label("Подход", systemImage: "plus").font(.subheadline.weight(.bold)).foregroundStyle(TeenTheme.lime) }; Spacer(); if entry.sets.count > 2 { Button("Удалить") { store.mutate { $0.exercises[index].sets.removeLast() } }.foregroundStyle(.red).font(.caption) } } } } }
@@ -176,7 +273,17 @@ struct PremiumExerciseView: View {
         }
     }
     private func advance(_ session: Session) { store.mutate { $0.exercises[index].status = "completed"; $0.current = min(index + 1, $0.exercises.count - 1) }; dismiss() }
-    private func skip() { store.mutate { $0.exercises[index].status = "skipped"; $0.current = min(index + 1, $0.exercises.count - 1) }; dismiss() }
+    private func skip() {
+        store.mutate { $0.exercises[index].status = "skipped"; $0.current = min(index + 1, $0.exercises.count - 1) }
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(.success)
+        showingSkipUndo = true
+    }
+    private func recover() {
+        store.recoverExercise(at: index)
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(.success)
+    }
 }
 
 struct PremiumHistoryView: View { @Environment(Store.self) private var store; let exerciseID: String; var body: some View { List(store.records.filter { $0.exercises.contains { $0.exerciseID == exerciseID } }) { record in VStack(alignment: .leading) { Text(record.name).font(.headline); Text(record.date.formatted(date: .long, time: .shortened)).foregroundStyle(.secondary).font(.caption) } }.navigationTitle("История") } }
@@ -259,11 +366,21 @@ struct PremiumSettingsView: View {
             TeenCard(accent: TeenTheme.ice) { VStack(spacing: 2) { settingButton("Экспорт JSON", detail: "Создать полную резервную копию", icon: "square.and.arrow.up", tint: TeenTheme.ice) { shareURL = store.export(); if shareURL == nil { message = "Не удалось создать копию" } }; divider; settingButton("Импорт копии", detail: "Выбрать JSON-файл", icon: "square.and.arrow.down", tint: TeenTheme.violet) { importing = true }; divider; settingButton("Вставить копию из буфера", detail: "Импортировать скопированный JSON", icon: "doc.on.clipboard", tint: TeenTheme.lime) { importClipboard() }; divider; settingButton("Очистить все данные", detail: "История, вода и незавершённая тренировка", icon: "trash", tint: .red) { confirmClear = true } } }
             TeenSectionTitle("напоминания")
             TeenCard(accent: TeenTheme.lime) { HStack(spacing: 13) { Image(systemName: "drop.badge.clock").foregroundStyle(TeenTheme.lime).font(.title3).frame(width: 38, height: 38).background(TeenTheme.lime.opacity(0.12), in: Circle()); VStack(alignment: .leading, spacing: 4) { Text("Вода").font(.headline); Text("Каждые 2 часа · 09:00–23:00").font(.caption).foregroundStyle(TeenTheme.muted) }; Spacer(); Toggle("Вода", isOn: Binding(get: { store.reminders }, set: { store.reminders = $0; store.save(); Task { await store.schedule() } })).labelsHidden().tint(TeenTheme.lime) } }
+            TeenCard(accent: TeenTheme.violet) { HStack(spacing: 13) { Image(systemName: "pills.fill").foregroundStyle(TeenTheme.violet).font(.title3).frame(width: 38, height: 38).background(TeenTheme.violet.opacity(0.12), in: Circle()); VStack(alignment: .leading, spacing: 4) { Text("Креатин").font(.headline); Text("Напоминание в \(store.creatineHour):00").font(.caption).foregroundStyle(TeenTheme.muted) }; Spacer(); Toggle("Напоминание", isOn: Binding(get: { store.creatineReminder }, set: { store.creatineReminder = $0; store.save(); Task { await store.scheduleCreatine() } })).labelsHidden().tint(TeenTheme.violet) } }
+            if store.creatineReminder {
+                Picker("Время", selection: Binding(get: { store.creatineHour }, set: { store.creatineHour = $0; store.save(); Task { await store.scheduleCreatine() } })) {
+                    ForEach(6...22, id: \.self) { h in Text("\(h):00").tag(h) }
+                }
+                .pickerStyle(.wheel)
+                .frame(maxHeight: 120)
+                .background(TeenTheme.raised, in: RoundedRectangle(cornerRadius: 14))
+                .padding(.top, 8)
+            }
             TeenSectionTitle("информация")
             TeenCard { VStack(alignment: .leading, spacing: 10) { Label("Только локальное хранение", systemImage: "lock.fill").font(.headline); Text("Тренировки, измерения и резервные копии не отправляются на сервер. JSON-копия нужна, чтобы перенести или восстановить свои данные.").font(.caption).foregroundStyle(TeenTheme.muted); Link(destination: URL(string: "https://t.me/sellyou4ss")!) { Label("Telegram разработчика", systemImage: "paperplane.fill").font(.subheadline.weight(.semibold)).foregroundStyle(TeenTheme.ice) } } }
         }.frame(maxWidth: .infinity).padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 112) }.toolbar(.hidden, for: .navigationBar)
             .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
-                do { let url = try result.get(); let accessed = url.startAccessingSecurityScopedResource(); defer { if accessed { url.stopAccessingSecurityScopedResource() } }; try store.restore(Data(contentsOf: url)); message = "Копия импортирована"; Task { await store.schedule() } } catch { message = "Не удалось импортировать: \(error.localizedDescription)" }
+                do { let url = try result.get(); let accessed = url.startAccessingSecurityScopedResource(); defer { if accessed { url.stopAccessingSecurityScopedResource() } }; try store.restore(Data(contentsOf: url)); message = "Копия импортирована"; Task { await store.scheduleAll() } } catch { message = "Не удалось импортировать: \(error.localizedDescription)" }
             }
             .confirmationDialog("Удалить все пользовательские данные?", isPresented: $confirmClear, titleVisibility: .visible) { Button("Удалить данные", role: .destructive) { store.clear() }; Button("Отмена", role: .cancel) { } } message: { Text("История тренировок, измерения, вода, инструкции и активная тренировка будут удалены.") }
             .sheet(item: Binding(get: { shareURL.map { ShareItem(url: $0) } }, set: { shareURL = $0?.url })) { ActivityView(url: $0.url) }
