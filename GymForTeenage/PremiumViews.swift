@@ -412,7 +412,7 @@ struct PremiumWorkoutDetailScreen: View {
             .confirmationDialog("Удалить тренировку", isPresented: $showingDeleteConfirmation) {
                 Button("Удалить", role: .destructive) { deleteRecord() }
                 Button("Отмена", role: .cancel) { }
-            } message: { Text("Тренировка будет Permanently удалена из истории.") }
+            } message: { Text("Тренировка будет безвозвратно удалена из истории.") }
         }.padding(20).padding(.bottom, 24) }.background(TeenTheme.ink).navigationTitle(record.name).navigationBarTitleDisplayMode(.inline)
     }
     private func deleteRecord() {
