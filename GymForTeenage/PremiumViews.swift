@@ -81,9 +81,35 @@ struct PremiumHomeView: View {
     }
     private var workoutCarousel: some View {
         VStack(spacing: 10) {
-            workoutCard(Catalog.workouts[selectedWorkoutIndex], isSelected: true)
-                .offset(x: dragOffset)
-                .gesture(workoutSwipeGesture)
+            HStack {
+                Button(action: { withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    if selectedWorkoutIndex > 0 { selectedWorkoutIndex -= 1 }
+                } } label: {
+                    Image(systemName: "arrow.left")
+                        .font(.title3)
+                        .foregroundStyle(selectedWorkoutIndex == 0 ? TeenTheme.muted : TeenTheme.lime)
+                        .frame(width: 30, height: 30)
+                        .background(.ultraThinMaterial, in: Circle())
+                }
+                .buttonStyle(PlainButtonStyle())
+                .accessibilityLabel("Предыдущая тренировка")
+                Spacer()
+                workoutCard(Catalog.workouts[selectedWorkoutIndex], isSelected: true)
+                    .offset(x: dragOffset)
+                    .gesture(workoutSwipeGesture)
+                Spacer()
+                Button(action: { withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    if selectedWorkoutIndex < Catalog.workouts.count - 1 { selectedWorkoutIndex += 1 }
+                } } label: {
+                    Image(systemName: "arrow.right")
+                        .font(.title3)
+                        .foregroundStyle(selectedWorkoutIndex == Catalog.workouts.count - 1 ? TeenTheme.muted : TeenTheme.lime)
+                        .frame(width: 30, height: 30)
+                        .background(.ultraThinMaterial, in: Circle())
+                }
+                .buttonStyle(PlainButtonStyle())
+                .accessibilityLabel("Следующая тренировка")
+            }
             HStack(spacing: 6) {
                 ForEach(Catalog.workouts.indices, id: \.self) { i in
                     Capsule().fill(i == selectedWorkoutIndex ? TeenTheme.violet : TeenTheme.line).frame(width: i == selectedWorkoutIndex ? 22 : 8, height: 6)
@@ -93,15 +119,15 @@ struct PremiumHomeView: View {
         }
     }
     private var workoutSwipeGesture: some Gesture {
-        DragGesture(minimumDistance: 40)
+        DragGesture(minimumDistance: 20)
             .updating($dragOffset) { value, state, _ in
-                if abs(value.translation.width) > abs(value.translation.height) {
-                    state = value.translation.width * 0.4
+                if abs(value.translation.width) > abs(value.translation.height) && abs(value.translation.width) > 10 {
+                    state = value.translation.width * 0.5
                 }
             }
             .onEnded { value in
                 let t = value.translation.width
-                guard abs(t) > abs(value.translation.height), abs(t) > swipeThreshold else { return }
+                guard abs(t) > abs(value.translation.height) else { return }
                 if t < 0 && selectedWorkoutIndex < Catalog.workouts.count - 1 {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { selectedWorkoutIndex += 1 }
                 } else if t > 0 && selectedWorkoutIndex > 0 {
@@ -367,6 +393,7 @@ struct PremiumProgressView: View {
 struct PremiumWorkoutDetailScreen: View {
     @Environment(Store.self) private var store
     let record: Record
+    @State private var showingDeleteConfirmation = false
     var body: some View {
         ScrollView(showsIndicators: false) { VStack(spacing: 16) {
             headerCard
@@ -379,9 +406,13 @@ struct PremiumWorkoutDetailScreen: View {
             }
             TeenSectionTitle("действия")
             HStack(spacing: 12) {
-                Button("Удалить тренировку") { deleteRecord() }.foregroundStyle(.red).font(.headline)
+                Button("Удалить тренировку") { showingDeleteConfirmation = true }.foregroundStyle(.red).font(.headline)
                 Spacer()
             }
+            .confirmationDialog("Удалить тренировку", isPresented: $showingDeleteConfirmation) {
+                Button("Удалить", role: .destructive) { deleteRecord() }
+                Button("Отмена", role: .cancel) { }
+            } message: { Text("Тренировка будет Permanently удалена из истории.") }
         }.padding(20).padding(.bottom, 24) }.background(TeenTheme.ink).navigationTitle(record.name).navigationBarTitleDisplayMode(.inline)
     }
     private func deleteRecord() {
