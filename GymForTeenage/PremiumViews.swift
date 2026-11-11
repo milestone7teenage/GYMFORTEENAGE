@@ -503,6 +503,14 @@ struct PremiumStatisticsView: View {
             CompactMetric(title: "лучший тоннаж", value: bestTonnage.map { "\($0.formatted(.number.precision(.fractionLength(0...0)))) кг·повт." } ?? "—", icon: "trophy", tint: TeenTheme.violet)
         }
     }
+    private func waterDays() -> [WaterDay] {
+        (0..<7).compactMap { offset in
+            guard let date = Calendar.current.date(byAdding: .day, value: offset - 6, to: Date()) else { return nil }
+            let formatter = DateFormatter(); formatter.dateFormat = "yyyy-MM-dd"; formatter.timeZone = .current
+            let day = formatter.string(from: date)
+            return store.water.first { $0.day == day } ?? WaterDay(day: day, ml: 0)
+        }
+    }
     private var waterSection: some View {
         let days = waterDays()
         return TeenCard(accent: TeenTheme.ice) { VStack(alignment: .leading, spacing: 12) { TeenSectionTitle("вода", detail: "7 дней"); Chart(days, id: \.day) { day in BarMark(x: .value("День", String(day.day.suffix(2))), y: .value("Мл", day.ml)).foregroundStyle(day.day == store.today ? TeenTheme.ice : TeenTheme.ice.opacity(0.35)).cornerRadius(5).annotation(position: .top) { if day.ml > 0 { Text("\(day.ml)").font(.caption2).foregroundStyle(TeenTheme.muted) } } }.frame(maxWidth: .infinity).frame(height: 170).chartYAxis { AxisMarks(position: .leading) } } }
