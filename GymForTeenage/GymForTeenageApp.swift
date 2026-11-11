@@ -44,9 +44,21 @@ enum Catalog {
  func mutate(_ body:(inout Session)->Void){ guard var s=session else{return};body(&s);session=s;save() }
  func finish(){ guard let s=session,let w=Catalog.workouts.first(where:{$0.id==s.workoutID}) else{return};records.insert(.init(workoutID:w.id,name:w.title,date:Date(),exercises:s.exercises),at:0);session=nil;save() }
  func recoverExercise(at index:Int){ guard let s=session, index>=0, index<s.exercises.count, s.exercises[index].status=="skipped" else { return }; mutate { state in state.exercises[index].status="pending"; state.current=index } }
- func recoverSkipped(){ guard let s=session, let idx=s.exercises.firstIndex(where:{$0.status=="skipped"}) else { return }; mutate { state in state.exercises[idx].status="pending"; state.current=idx } }
- var totalTonnage:Double { records.reduce(0){$0+Metrics.tonnage($1.exercises)} }
- var completedSets:Int { records.reduce(0){$0+Metrics.completedSets($1.exercises)} }
+func recoverSkipped(){ guard let s=session, let idx=s.exercises.firstIndex(where:{$0.status=="skipped"}) else { return }; mutate { state in state.exercises[idx].status="pending"; state.current=idx } }
+  /// Возвращает историю выполнений упражнения: пары (рекорд, лог упражнения из него), от newer к older.
+  func exerciseHistory(for exerciseID: String) -> [(record: Record, log: ExerciseLog)] {
+      records
+          .compactMap { record in
+              guard let log = record.exercises.first(where: { $0.exerciseID == exerciseID || $0.actualID == exerciseID }),
+                    log.status != "skipped" else { return nil }
+              let working = log.sets.filter { !$0.skipped && !$0.weight.isEmpty && !$0.reps.isEmpty && Int($0.reps) != nil }
+              guard !working.isEmpty else { return nil }
+              return (record, log)
+          }
+          .sorted { $0.record.date > $1.record.date }
+  }
+  var totalTonnage:Double { records.reduce(0){$0+Metrics.tonnage($1.exercises)} }
+  var completedSets:Int { records.reduce(0){$0+Metrics.completedSets($1.exercises)} }
 func export()->URL? { let b=Backup(records:records,measures:measures,water:water,session:session,instructions:instructions,reminders:reminders,creatineLog:creatineLog,creatineReminder:creatineReminder,creatineHour:creatineHour);guard let d=try? JSONEncoder.pretty.encode(b) else{return nil};let u=FileManager.default.temporaryDirectory.appendingPathComponent("GymForTeenage-Backup.json");try? d.write(to:u,options:.atomic);return u }
   func restore(_ data:Data) throws { guard data.count <= 20*1024*1024 else { throw NSError(domain:"GymBackup",code:3,userInfo:[NSLocalizedDescriptionKey:"Файл резервной копии слишком большой"])}; let b=try JSONDecoder.iso.decode(Backup.self,from:data);try BackupValidator.validate(b);let encoded=try JSONEncoder.pretty.encode(b);try encoded.write(to:url,options:.atomic);persistenceAvailable=true;records=b.records;measures=b.measures;water=b.water;session=b.session;instructions=b.instructions;reminders=b.reminders;creatineLog=b.creatineLog ?? [:];creatineReminder=b.creatineReminder ?? false;creatineHour=b.creatineHour ?? 20 }
   func clear(){records=[];measures=[];water=[];session=nil;instructions=[:];reminders=false;creatineLog=[:];creatineReminder=false;UNUserNotificationCenter.current().removeAllPendingNotificationRequests();save()}

@@ -103,6 +103,28 @@ struct TeenPill: View {
     }
 }
 
+struct CompactMetric: View {
+    let title: String
+    let value: String
+    let icon: String
+    let tint: Color
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon).foregroundStyle(tint).font(.caption.weight(.semibold))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value).font(.system(.footnote, design: .rounded, weight: .bold)).monospacedDigit().lineLimit(1)
+                Text(title.uppercased()).font(.system(size: 8, weight: .bold)).foregroundStyle(TeenTheme.muted).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(TeenTheme.raised, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(TeenTheme.line, lineWidth: 1))
+    }
+}
+
 enum TechniqueGuide {
     static func instruction(for id: String) -> String {
         switch id {
