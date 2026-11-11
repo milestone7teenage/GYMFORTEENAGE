@@ -346,9 +346,10 @@ struct PremiumProgressView: View {
     }
     private var header: some View { HStack { VStack(alignment: .leading, spacing: 4) { Text("прогресс").font(.system(.largeTitle, design: .rounded, weight: .bold)); Text("История твоих тренировок").font(.subheadline).foregroundStyle(TeenTheme.muted) }; Spacer(); Image(systemName: "list.bullet.rectangle.fill").font(.title3).foregroundStyle(TeenTheme.lime).frame(width: 42, height: 42).background(TeenTheme.surface, in: Circle()) } }
     private func workoutHistoryCard(_ record: Record) -> some View {
-        let completed = record.exercises.filter { $0.status != "skipped" && !$0.sets.allSatisfy { $0.skipped } }
+        let nonSkippedExercises = record.exercises.filter { $0.status != "skipped" }
+        let completed = nonSkippedExercises.filter { !$0.sets.allSatisfy { $0.skipped } }
         let skipped = record.exercises.filter { $0.status == "skipped" }
-        let sets = record.exercises.reduce(0) { $0 + $1.sets.filter { !$0.skipped }.count }
+        let sets = nonSkippedExercises.reduce(0) { $0 + $1.sets.filter { !$0.skipped }.count }
         return TeenCard(accent: TeenTheme.violet) { HStack(spacing: 14) {
             Image(systemName: "figure.strengthtraining.traditional").font(.title2).foregroundStyle(TeenTheme.lime).frame(width: 48, height: 48).background(TeenTheme.lime.opacity(0.12), in: Circle())
             VStack(alignment: .leading, spacing: 4) {
@@ -367,20 +368,39 @@ struct PremiumWorkoutDetailScreen: View {
     @Environment(Store.self) private var store
     let record: Record
     var body: some View {
-        let done = record.exercises.filter { $0.status != "skipped" }
-        let skipped = record.exercises.filter { $0.status == "skipped" }
-        return ScrollView(showsIndicators: false) { VStack(spacing: 16) {
-            TeenCard(accent: TeenTheme.lime) { VStack(alignment: .leading, spacing: 6) { Text(record.name).font(.title2.bold()); Text(record.date.ruLong).font(.subheadline).foregroundStyle(TeenTheme.muted); HStack(spacing: 8) { TeenPill(title: "\(done.count) упражнений", tint: TeenTheme.lime); if !skipped.isEmpty { TeenPill(title: "\(skipped.count) пропущено", tint: .red) }; TeenPill(title: "\((record.exercises.flatMap { $0.sets }.filter { !$0.skipped }).count) подходов", tint: TeenTheme.ice) } } }
+        ScrollView(showsIndicators: false) { VStack(spacing: 16) {
+            headerCard
             TeenSectionTitle("выполненные упражнения")
             if done.isEmpty { TeenCard { TeenEmpty(icon: "dumbbell", title: "Упражнений не было", detail: "В этой тренировке все упражнения были пропущены.") } }
             ForEach(done) { log in exerciseDetail(log) }
             if !skipped.isEmpty {
                 TeenSectionTitle("пропущенные упражнения")
-                ForEach(skipped) { log in
-                    TeenCard { HStack(spacing: 12) { Image(systemName: "xmark.circle.fill").font(.title3).foregroundStyle(.red); VStack(alignment: .leading, spacing: 3) { Text(Catalog.e(log.actualID).title).font(.subheadline.weight(.semibold)); Text("Пропущено в этой тренировке").font(.caption).foregroundStyle(TeenTheme.muted) }; Spacer() } }
-                }
+                ForEach(skipped) { log in skippedCard(log) }
+            }
+            TeenSectionTitle("действия")
+            HStack(spacing: 12) {
+                Button("Удалить тренировку") { deleteRecord() }.foregroundStyle(.red).font(.headline)
+                Spacer()
             }
         }.padding(20).padding(.bottom, 24) }.background(TeenTheme.ink).navigationTitle(record.name).navigationBarTitleDisplayMode(.inline)
+    }
+    private func deleteRecord() {
+        store.records.removeAll { $0.id == record.id }
+        store.save()
+    }
+    private var done: [ExerciseLog] { record.exercises.filter { $0.status != "skipped" } }
+    private var skipped: [ExerciseLog] { record.exercises.filter { $0.status == "skipped" } }
+    private var totalSets: Int { record.exercises.flatMap { $0.sets }.filter { !$0.skipped }.count }
+    private var headerCard: some View {
+        TeenCard(accent: TeenTheme.lime) { VStack(alignment: .leading, spacing: 6) {
+            Text(record.name).font(.title2.bold())
+            Text(record.date.ruLong).font(.subheadline).foregroundStyle(TeenTheme.muted)
+            HStack(spacing: 8) {
+                TeenPill(title: "\(done.count) упражнений", tint: TeenTheme.lime)
+                if !skipped.isEmpty { TeenPill(title: "\(skipped.count) пропущено", tint: .red) }
+                TeenPill(title: "\(totalSets) подходов", tint: TeenTheme.ice)
+            }
+        } }
     }
     private func exerciseDetail(_ log: ExerciseLog) -> some View {
         let working = log.sets.enumerated().filter { !$0.element.skipped }
@@ -400,6 +420,16 @@ struct PremiumWorkoutDetailScreen: View {
                 }
                 .padding(6).background(TeenTheme.raised, in: RoundedRectangle(cornerRadius: 10))
             }
+        } }
+    }
+    private func skippedCard(_ log: ExerciseLog) -> some View {
+        TeenCard { HStack(spacing: 12) {
+            Image(systemName: "xmark.circle.fill").font(.title3).foregroundStyle(.red)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(Catalog.e(log.actualID).title).font(.subheadline.weight(.semibold))
+                Text("Пропущено в этой тренировке").font(.caption).foregroundStyle(TeenTheme.muted)
+            }
+            Spacer()
         } }
     }
 }
