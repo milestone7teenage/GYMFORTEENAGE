@@ -56,6 +56,9 @@ struct PremiumHomeView: View {
     @State private var showMeasure = false
     @State private var kind = "weight"
     @State private var value = ""
+    @State private var selectedWorkoutIndex = 0
+    @GestureState private var dragOffset: CGFloat = 0
+    private let swipeThreshold: CGFloat = 80
     private var waterProgress: Double { Double(store.todayML) / 3000 }
     var body: some View {
         NavigationStack {
@@ -64,7 +67,7 @@ struct PremiumHomeView: View {
                     header
                     HStack(spacing: 12) { measureCard("Вес", unit: "кг", kind: "weight", icon: "scalemass.fill", tint: TeenTheme.violet); measureCard("Рост", unit: "см", kind: "height", icon: "ruler.fill", tint: TeenTheme.ice) }
                     TeenSectionTitle("тренировки", detail: store.session == nil ? "3 программы" : "есть активная")
-                    ForEach(Catalog.workouts) { workout in workoutCard(workout) }
+                    workoutCarousel
                     TeenSectionTitle("вода сегодня", detail: "цель 3 000 мл")
                     waterCard
                     TeenSectionTitle("креатин сегодня", detail: "ежедневная отметка")
@@ -75,6 +78,36 @@ struct PremiumHomeView: View {
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showMeasure) { measureSheet }
         }
+    }
+    private var workoutCarousel: some View {
+        VStack(spacing: 10) {
+            workoutCard(Catalog.workouts[selectedWorkoutIndex], isSelected: true)
+                .offset(x: dragOffset)
+                .gesture(workoutSwipeGesture)
+            HStack(spacing: 6) {
+                ForEach(Catalog.workouts.indices, id: \.self) { i in
+                    Capsule().fill(i == selectedWorkoutIndex ? TeenTheme.violet : TeenTheme.line).frame(width: i == selectedWorkoutIndex ? 22 : 8, height: 6)
+                        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: selectedWorkoutIndex)
+                }
+            }
+        }
+    }
+    private var workoutSwipeGesture: some Gesture {
+        DragGesture(minimumDistance: 40)
+            .updating($dragOffset) { value, state, _ in
+                if abs(value.translation.width) > abs(value.translation.height) {
+                    state = value.translation.width * 0.4
+                }
+            }
+            .onEnded { value in
+                let t = value.translation.width
+                guard abs(t) > abs(value.translation.height), abs(t) > swipeThreshold else { return }
+                if t < 0 && selectedWorkoutIndex < Catalog.workouts.count - 1 {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { selectedWorkoutIndex += 1 }
+                } else if t > 0 && selectedWorkoutIndex > 0 {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { selectedWorkoutIndex -= 1 }
+                }
+            }
     }
     private var header: some View {
         HStack(alignment: .bottom) {
@@ -99,12 +132,12 @@ struct PremiumHomeView: View {
             }.frame(maxWidth: .infinity)
         }.buttonStyle(TeenPressStyle())
     }
-    private func workoutCard(_ workout: Training) -> some View {
+    private func workoutCard(_ workout: Training, isSelected: Bool = false) -> some View {
         let active = store.session?.workoutID == workout.id
         return NavigationLink { PremiumWorkoutView(workout: workout) } label: {
-            TeenCard(accent: active ? TeenTheme.lime : TeenTheme.violet) {
+            TeenCard(accent: active ? TeenTheme.lime : (isSelected ? TeenTheme.violet : nil)) {
                 HStack(spacing: 14) {
-                    Text(workout.id.replacingOccurrences(of: "w", with: "0")).font(.system(.title2, design: .rounded, weight: .bold)).foregroundStyle(active ? TeenTheme.lime : TeenTheme.violet).frame(width: 42, height: 42).background((active ? TeenTheme.lime : TeenTheme.violet).opacity(0.13), in: Circle())
+                    Text(workout.id.replacingOccurrences(of: "w", with: "0")).font(.system(.title2, design: .rounded, weight: .bold)).foregroundStyle(active ? TeenTheme.lime : (isSelected ? TeenTheme.violet : .white)).frame(width: 42, height: 42).background((active ? TeenTheme.lime : (isSelected ? TeenTheme.violet : .white)).opacity(0.13), in: Circle())
                     VStack(alignment: .leading, spacing: 5) { Text(workout.title).font(.headline); Text(active ? "Продолжить незавершённую тренировку" : "\(workout.exercises.count) упражнений").font(.caption).foregroundStyle(TeenTheme.muted) }
                     Spacer(); Image(systemName: active ? "arrow.clockwise" : "arrow.up.right").font(.headline).foregroundStyle(active ? TeenTheme.lime : .white)
                 }
@@ -299,106 +332,178 @@ struct PremiumHistoryView: View { @Environment(Store.self) private var store; le
 
 struct PremiumProgressView: View {
     @Environment(Store.self) private var store
-    @State private var expandedWorkout: String?
     var body: some View {
         NavigationStack { ScrollView(showsIndicators: false) { VStack(spacing: 16) {
             header
-            HStack(spacing: 8) { CompactMetric(title: "тренировок", value: "\(store.records.count)", icon: "figure.strengthtraining.traditional", tint: TeenTheme.lime); CompactMetric(title: "тоннаж", value: short(store.totalTonnage), icon: "scalemass.fill", tint: TeenTheme.violet); CompactMetric(title: "подходов", value: "\(store.completedSets)", icon: "checkmark.circle.fill", tint: TeenTheme.ice) }
-            TeenSectionTitle("по программам", detail: "прогрессия нагрузки")
-            ForEach(Catalog.workouts) { workout in workoutBlock(workout) }
-        }.frame(maxWidth: .infinity).padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 112) }.toolbar(.hidden, for: .navigationBar) }
-    }
-    private var header: some View { HStack { VStack(alignment: .leading, spacing: 4) { Text("прогресс").font(.system(.largeTitle, design: .rounded, weight: .bold)); Text("История твоей работы").font(.subheadline).foregroundStyle(TeenTheme.muted) }; Spacer(); Image(systemName: "chart.line.uptrend.xyaxis").font(.title3).foregroundStyle(TeenTheme.lime).frame(width: 42, height: 42).background(TeenTheme.surface, in: Circle()) } }
-    private func workoutBlock(_ workout: Training) -> some View {
-        let records = Array(store.records.filter { $0.workoutID == workout.id }.prefix(6).reversed())
-        let isExpanded = expandedWorkout == workout.id
-        return TeenCard(accent: TeenTheme.violet) { VStack(alignment: .leading, spacing: 12) { HStack { VStack(alignment: .leading, spacing: 3) { Text(workout.title).font(.headline); Text("\(records.count) завершений").font(.caption).foregroundStyle(TeenTheme.muted) }; Spacer(); Button { withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { expandedWorkout = isExpanded ? nil : workout.id } } label: { TeenPill(title: records.isEmpty ? "нет данных" : "\(short(records.last.map { Metrics.tonnage($0.exercises) } ?? 0)) кг", tint: TeenTheme.lime) }.buttonStyle(TeenPressStyle()) }; if records.isEmpty { TeenEmpty(icon: "chart.line.flattrend.xyaxis", title: "Первое выполнение впереди", detail: "Заверши тренировку, чтобы увидеть динамику тоннажа.") } else { Chart(records) { record in AreaMark(x: .value("Дата", record.date), y: .value("Тоннаж", Metrics.tonnage(record.exercises))).foregroundStyle(LinearGradient(colors: [TeenTheme.lime.opacity(0.35), .clear], startPoint: .top, endPoint: .bottom)); LineMark(x: .value("Дата", record.date), y: .value("Тоннаж", Metrics.tonnage(record.exercises))).foregroundStyle(TeenTheme.lime).lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round)); PointMark(x: .value("Дата", record.date), y: .value("Тоннаж", Metrics.tonnage(record.exercises))).foregroundStyle(TeenTheme.lime) }.frame(maxWidth: .infinity).frame(height: 110).chartXAxis(.hidden).chartYAxis(.hidden); ForEach(records.suffix(2)) { record in HStack { Text(record.date.ruShort).foregroundStyle(TeenTheme.muted); Spacer(); Text("\(short(Metrics.tonnage(record.exercises))) кг·повт.").fontWeight(.semibold) }.font(.caption) }; if isExpanded { exerciseProgression(workout: workout, records: records) } } } }
-    }
-    private func exerciseProgression(workout: Training, records: [Record]) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            TeenSectionTitle("упражнения", detail: "вес · повторы")
-            ForEach(workout.exercises.prefix(3)) { exercise in
-                let exerciseHistory = store.exerciseHistory(for: exercise.id).prefix(2)
-                if !exerciseHistory.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(exercise.title).font(.caption2.weight(.semibold)).foregroundStyle(TeenTheme.muted)
-                        ForEach(Array(exerciseHistory), id: \.record.id) { item in
-                            HStack(spacing: 6) {
-                                Text(item.record.date.ruShort)
-                                Text(item.log.sets.map { "\($0.weight)×\($0.reps)" }.joined(separator: " ")).font(.caption2).monospacedDigit()
-                                Spacer()
-                                Text("\(item.log.sets.count) подх.").font(.system(size: 8)).foregroundStyle(TeenTheme.muted)
-                            }
-                            .padding(.horizontal, 8).padding(.vertical, 4)
-                            .background(TeenTheme.raised, in: RoundedRectangle(cornerRadius: 8))
-                        }
-                    }
+            if store.records.isEmpty {
+                TeenCard { TeenEmpty(icon: "list.bullet.rectangle", title: "Пока нет тренировок", detail: "Заверши тренировку — она появится здесь с полным списком подходов.") }
+            } else {
+                ForEach(store.records) { record in
+                    NavigationLink { PremiumWorkoutDetailScreen(record: record) } label: { workoutHistoryCard(record) }.buttonStyle(TeenPressStyle())
                 }
             }
-        }
+        }.frame(maxWidth: .infinity).padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 112) }.toolbar(.hidden, for: .navigationBar) }
     }
-    private func short(_ value: Double) -> String { value.formatted(.number.precision(.fractionLength(0...0))) }
+    private var header: some View { HStack { VStack(alignment: .leading, spacing: 4) { Text("прогресс").font(.system(.largeTitle, design: .rounded, weight: .bold)); Text("История твоих тренировок").font(.subheadline).foregroundStyle(TeenTheme.muted) }; Spacer(); Image(systemName: "list.bullet.rectangle.fill").font(.title3).foregroundStyle(TeenTheme.lime).frame(width: 42, height: 42).background(TeenTheme.surface, in: Circle()) } }
+    private func workoutHistoryCard(_ record: Record) -> some View {
+        let completed = record.exercises.filter { $0.status != "skipped" && !$0.sets.allSatisfy { $0.skipped } }
+        let skipped = record.exercises.filter { $0.status == "skipped" }
+        let sets = record.exercises.reduce(0) { $0 + $1.sets.filter { !$0.skipped }.count }
+        return TeenCard(accent: TeenTheme.violet) { HStack(spacing: 14) {
+            Image(systemName: "figure.strengthtraining.traditional").font(.title2).foregroundStyle(TeenTheme.lime).frame(width: 48, height: 48).background(TeenTheme.lime.opacity(0.12), in: Circle())
+            VStack(alignment: .leading, spacing: 4) {
+                Text(record.name).font(.headline)
+                Text(record.date.ruLong).font(.caption).foregroundStyle(TeenTheme.muted)
+                Text("\(completed.count) упражнений · \(sets) подходов").font(.caption.weight(.semibold))
+                if !skipped.isEmpty { Text("+ \(skipped.count) пропущено").font(.caption2).foregroundStyle(.red) }
+            }
+            Spacer()
+            Image(systemName: "chevron.right").font(.caption).foregroundStyle(TeenTheme.muted)
+        } }
+    }
+}
+
+struct PremiumWorkoutDetailScreen: View {
+    @Environment(Store.self) private var store
+    let record: Record
+    var body: some View {
+        let done = record.exercises.filter { $0.status != "skipped" }
+        let skipped = record.exercises.filter { $0.status == "skipped" }
+        return ScrollView(showsIndicators: false) { VStack(spacing: 16) {
+            TeenCard(accent: TeenTheme.lime) { VStack(alignment: .leading, spacing: 6) { Text(record.name).font(.title2.bold()); Text(record.date.ruLong).font(.subheadline).foregroundStyle(TeenTheme.muted); HStack(spacing: 8) { TeenPill(title: "\(done.count) упражнений", tint: TeenTheme.lime); if !skipped.isEmpty { TeenPill(title: "\(skipped.count) пропущено", tint: .red) }; TeenPill(title: "\((record.exercises.flatMap { $0.sets }.filter { !$0.skipped }).count) подходов", tint: TeenTheme.ice) } } }
+            TeenSectionTitle("выполненные упражнения")
+            if done.isEmpty { TeenCard { TeenEmpty(icon: "dumbbell", title: "Упражнений не было", detail: "В этой тренировке все упражнения были пропущены.") } }
+            ForEach(done) { log in exerciseDetail(log) }
+            if !skipped.isEmpty {
+                TeenSectionTitle("пропущенные упражнения")
+                ForEach(skipped) { log in
+                    TeenCard { HStack(spacing: 12) { Image(systemName: "xmark.circle.fill").font(.title3).foregroundStyle(.red); VStack(alignment: .leading, spacing: 3) { Text(Catalog.e(log.actualID).title).font(.subheadline.weight(.semibold)); Text("Пропущено в этой тренировке").font(.caption).foregroundStyle(TeenTheme.muted) }; Spacer() } }
+                }
+            }
+        }.padding(20).padding(.bottom, 24) }.background(TeenTheme.ink).navigationTitle(record.name).navigationBarTitleDisplayMode(.inline)
+    }
+    private func exerciseDetail(_ log: ExerciseLog) -> some View {
+        let working = log.sets.enumerated().filter { !$0.element.skipped }
+        return TeenCard { VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(uiImage: exerciseUIImage(Catalog.e(log.actualID).image)).resizable().scaledToFill().frame(width: 40, height: 40).clipShape(Circle())
+                Text(Catalog.e(log.actualID).title).font(.headline)
+                Spacer()
+                TeenPill(title: "\(working.count) подх.", tint: TeenTheme.lime)
+            }
+            ForEach(working, id: \.offset) { i, set in
+                HStack(spacing: 8) {
+                    Text("\(i + 1)").font(.caption.weight(.bold)).frame(width: 26, height: 26).background(TeenTheme.lime.opacity(0.12), in: Circle()).foregroundStyle(TeenTheme.lime)
+                    Text("\(set.weight) кг").font(.subheadline.weight(.semibold)).monospacedDigit()
+                    Spacer()
+                    Text("\(set.reps) повторений").font(.caption).foregroundStyle(TeenTheme.muted)
+                }
+                .padding(6).background(TeenTheme.raised, in: RoundedRectangle(cornerRadius: 10))
+            }
+        } }
+    }
 }
 
 struct PremiumStatisticsView: View {
     @Environment(Store.self) private var store
-    @State private var selectedWorkout = "w1"
+    @State private var selectedExercise: Exercise?
+    @State private var selectedMetric: MetricType = .weight
+    enum MetricType: String, CaseIterable { case weight = "Вес", tonnage = "Тоннаж", sets = "Подходы" }
     var body: some View {
-        NavigationStack {
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 16) {
-                    HStack { VStack(alignment: .leading, spacing: 4) { Text("статистика").font(.system(.largeTitle, design: .rounded, weight: .bold)); Text("Реальные данные за твой период").font(.subheadline).foregroundStyle(TeenTheme.muted) }; Spacer() }
-                    frequency
-                    comparison
-                    water
-                    measureChart(kind: "weight", title: "вес", tint: TeenTheme.violet)
-                    measureChart(kind: "height", title: "рост", tint: TeenTheme.ice)
-                }.frame(maxWidth: .infinity).padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 112)
-            }.toolbar(.hidden, for: .navigationBar)
-        }
+        NavigationStack { ScrollView(showsIndicators: false) { VStack(spacing: 16) {
+            header
+            exerciseSelector
+            if let ex = selectedExercise {
+                metricPicker
+                if hasData(for: ex) { chartSection(for: ex) } else { noDataSection() }
+                summaryCards(for: ex)
+            } else {
+                TeenCard { TeenEmpty(icon: "dumbbell", title: "Выбери упражнение", detail: "Здесь появится график прогрессии веса, тоннажа и подходов.") }
+            }
+            waterSection
+            measureChart(kind: "weight", title: "вес", tint: TeenTheme.violet)
+            measureChart(kind: "height", title: "рост", tint: TeenTheme.ice)
+        }.frame(maxWidth: .infinity).padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 112) }.toolbar(.hidden, for: .navigationBar) }
     }
-private var frequency: some View {
-        HStack(spacing: 8) { CompactMetric(title: "неделя", value: "\(count(.weekOfYear))", icon: "calendar", tint: TeenTheme.lime); CompactMetric(title: "месяц", value: "\(count(.month))", icon: "calendar.badge.clock", tint: TeenTheme.violet); CompactMetric(title: "лучший день", value: bestDay ?? "—", icon: "star.fill", tint: TeenTheme.ice) }
+    private var header: some View { HStack { VStack(alignment: .leading, spacing: 4) { Text("статистика").font(.system(.largeTitle, design: .rounded, weight: .bold)); Text("Аналитика по упражнениям").font(.subheadline).foregroundStyle(TeenTheme.muted) }; Spacer() } }
+    private var exerciseSelector: some View {
+        let all = Catalog.all
+        return TeenCard(accent: TeenTheme.violet) { VStack(alignment: .leading, spacing: 10) {
+            TeenSectionTitle("упражнение")
+            ScrollView(.horizontal, showsIndicators: false) { HStack(spacing: 8) {
+                Button { selectedExercise = nil } label: {
+                    Text("Все").font(.caption.weight(.semibold)).padding(.horizontal, 12).padding(.vertical, 6)
+                        .background(selectedExercise == nil ? TeenTheme.violet : TeenTheme.raised, in: Capsule())
+                        .foregroundStyle(selectedExercise == nil ? TeenTheme.ink : .white)
+                }.buttonStyle(TeenPressStyle())
+                ForEach(all) { ex in
+                    Button { selectedExercise = ex } label: {
+                        Text(ex.title).font(.caption.weight(.semibold)).padding(.horizontal, 12).padding(.vertical, 6)
+                            .background(selectedExercise?.id == ex.id ? TeenTheme.violet : TeenTheme.raised, in: Capsule())
+                            .foregroundStyle(selectedExercise?.id == ex.id ? TeenTheme.ink : .white)
+                    }.buttonStyle(TeenPressStyle())
+                }
+            } }
+        } }
     }
-    private var comparison: some View {
-        let records = Array(store.records.filter { $0.workoutID == selectedWorkout }.prefix(6).reversed())
-        let workout = Catalog.workouts.first { $0.id == selectedWorkout }
-        return TeenCard(accent: TeenTheme.violet) { VStack(alignment: .leading, spacing: 12) { TeenSectionTitle("прогрессия нагрузки", detail: "по упражнениям"); Picker("Тренировка", selection: $selectedWorkout) { ForEach(Catalog.workouts) { Text($0.title).tag($0.id) } }.pickerStyle(.segmented); if records.isEmpty { TeenEmpty(icon: "chart.xyaxis.line", title: "Ещё нет сравнений", detail: "После завершения тренировок здесь появятся реальные линии нагрузки.") } else { exerciseLoadChart(records: records, workout: workout) } } } }
-    private func exerciseLoadChart(records: [Record], workout: Training?) -> some View {
-        let exercises = workout?.exercises ?? []
-        let palette: [Color] = [TeenTheme.lime, TeenTheme.ice, TeenTheme.violet, Color(red: 1.0, green: 0.6, blue: 0.2), Color(red: 0.4, green: 0.9, blue: 0.6)]
-        return Chart {
-            ForEach(Array(exercises.enumerated()), id: \.offset) { idx, exercise in
-                ForEach(records) { record in
-                    if let log = record.exercises.first(where: { $0.exerciseID == exercise.id || $0.actualID == exercise.id }),
-                       log.status != "skipped" {
-                        let working = log.sets.filter { !$0.skipped && !$0.weight.isEmpty && !$0.reps.isEmpty && Int($0.reps) != nil }
-                        if let maxWeight = working.compactMap { Double($0.weight.replacingOccurrences(of: ",", with: ".")) }.max() {
-                            LineMark(x: .value("Дата", record.date), y: .value("Вес", maxWeight))
-                                .foregroundStyle(palette[idx % palette.count])
-                                .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
-                            PointMark(x: .value("Дата", record.date), y: .value("Вес", maxWeight))
-                                .foregroundStyle(palette[idx % palette.count])
-                        }
+    private var metricPicker: some View {
+        Picker("Показатель", selection: $selectedMetric) {
+            ForEach(MetricType.allCases, id: \.self) { m in Text(m.rawValue).tag(m) }
+        }.pickerStyle(.segmented)
+    }
+    private func hasData(for exercise: Exercise) -> Bool {
+        store.exerciseHistory(for: exercise.id).count > 1
+    }
+    private func noDataSection() -> some View {
+        TeenCard { TeenEmpty(icon: "chart.line.flattrend.xyaxis", title: "Мало данных", detail: "Нужно минимум 2 тренировки с этим упражнением для построения графика.") }
+    }
+    private func chartSection(for exercise: Exercise) -> some View {
+        let history = store.exerciseHistory(for: exercise.id)
+        return TeenCard(accent: TeenTheme.violet) { VStack(alignment: .leading, spacing: 12) {
+            TeenSectionTitle("прогрессия", detail: selectedMetric.rawValue.lowercased())
+            if history.isEmpty {
+                Text("Нет выполнений").font(.caption).foregroundStyle(TeenTheme.muted)
+            } else {
+                Chart {
+                    ForEach(history, id: \.record.id) { item in
+                        let y = metricValue(for: item.log, type: selectedMetric)
+                        LineMark(x: .value("Дата", item.record.date), y: .value(selectedMetric.rawValue, y))
+                            .foregroundStyle(TeenTheme.violet).lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                        PointMark(x: .value("Дата", item.record.date), y: .value(selectedMetric.rawValue, y))
+                            .foregroundStyle(TeenTheme.lime)
                     }
                 }
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: 180)
-        .chartXAxis {
-        AxisMarks(values: .automatic(desiredCount: 4)) { value in
-            if let date = value.as(Date.self) {
-                AxisValueLabel {
-                    Text(date.ruShort)
+                .frame(height: 180)
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 4)) { value in
+                        if let date = value.as(Date.self) { AxisValueLabel { Text(date.ruShort) } }
+                    }
                 }
+                .chartYAxis { AxisMarks(position: .leading) }
             }
+        } }
+    }
+    private func metricValue(for log: ExerciseLog, type: MetricType) -> Double {
+        let working = log.sets.filter { !$0.skipped && !$0.weight.isEmpty && !$0.reps.isEmpty && Int($0.reps) != nil }
+        switch type {
+        case .weight:
+            return working.compactMap { Double($0.weight.replacingOccurrences(of: ",", with: ".")) }.max() ?? 0
+        case .tonnage:
+            return working.reduce(0) { $0 + (Double($1.weight.replacingOccurrences(of: ",", with: ".")) ?? 0) * (Double($1.reps) ?? 0) }
+        case .sets:
+            return Double(working.count)
         }
     }
-    .chartYAxis { AxisMarks(position: .leading) }
-    .chartLegend(.visible)
-}
-    private var water: some View {
+    private func summaryCards(for exercise: Exercise) -> some View {
+        let history = store.exerciseHistory(for: exercise.id)
+        let latestWeight = history.first.map { metricValue(for: $0.log, type: .weight) }
+        let bestTonnage = history.map { metricValue(for: $0.log, type: .tonnage) }.max()
+        return HStack(spacing: 8) {
+            CompactMetric(title: "последний вес", value: latestWeight.map { "\($0.formatted(.number.precision(.fractionLength(0...0)))) кг" } ?? "—", icon: "dumbbell", tint: TeenTheme.lime)
+            CompactMetric(title: "лучший тоннаж", value: bestTonnage.map { "\($0.formatted(.number.precision(.fractionLength(0...0)))) кг·повт." } ?? "—", icon: "trophy", tint: TeenTheme.violet)
+        }
+    }
+    private var waterSection: some View {
         let days = waterDays()
         return TeenCard(accent: TeenTheme.ice) { VStack(alignment: .leading, spacing: 12) { TeenSectionTitle("вода", detail: "7 дней"); Chart(days, id: \.day) { day in BarMark(x: .value("День", String(day.day.suffix(2))), y: .value("Мл", day.ml)).foregroundStyle(day.day == store.today ? TeenTheme.ice : TeenTheme.ice.opacity(0.35)).cornerRadius(5).annotation(position: .top) { if day.ml > 0 { Text("\(day.ml)").font(.caption2).foregroundStyle(TeenTheme.muted) } } }.frame(maxWidth: .infinity).frame(height: 170).chartYAxis { AxisMarks(position: .leading) } } }
     }
@@ -406,19 +511,6 @@ private var frequency: some View {
         let values = store.measures.filter { $0.kind == kind && $0.date >= Calendar.current.date(byAdding: .month, value: -12, to: Date())! }.sorted { $0.date < $1.date }
         return TeenCard(accent: tint) { VStack(alignment: .leading, spacing: 12) { TeenSectionTitle(title, detail: "12 месяцев"); if values.isEmpty { TeenEmpty(icon: kind == "weight" ? "scalemass" : "ruler", title: "Нет измерений", detail: "Добавь \(title), чтобы увидеть настоящую динамику.") } else { Chart(values) { value in AreaMark(x: .value("Дата", value.date), y: .value("Значение", value.value)).foregroundStyle(LinearGradient(colors: [tint.opacity(0.35), .clear], startPoint: .top, endPoint: .bottom)); LineMark(x: .value("Дата", value.date), y: .value("Значение", value.value)).foregroundStyle(tint).lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round)); PointMark(x: .value("Дата", value.date), y: .value("Значение", value.value)).foregroundStyle(tint) }.frame(maxWidth: .infinity).frame(height: 170).chartXAxis { AxisMarks { value in if let date = value.as(Date.self) { AxisValueLabel { Text(date.ruShort) } } } }.chartYAxis { AxisMarks(position: .leading) } } } }
     }
-    private func count(_ component: Calendar.Component) -> Int { let now = Date(); let start = Calendar.current.dateInterval(of: component, for: now)?.start ?? now; return store.records.filter { $0.date >= start }.count }
-    private var bestDay: String? {
-        let grouped = Dictionary(grouping: store.records) { Calendar.current.startOfDay(for: $0.date) }
-        let totals: [(date: Date, load: Double)] = grouped.map { date, records in
-            let load = records.reduce(0.0) { partial, record in partial + Metrics.tonnage(record.exercises) }
-            return (date, load)
-        }
-        let ranked = totals.filter { $0.load > 0 }.sorted { left, right in
-            left.load == right.load ? left.date < right.date : left.load > right.load
-        }
-        return ranked.first?.date.formatted(date: .abbreviated, time: .omitted)
-    }
-    private func waterDays() -> [WaterDay] { (0..<7).compactMap { offset in guard let date = Calendar.current.date(byAdding: .day, value: offset - 6, to: Date()) else { return nil }; let formatter = DateFormatter(); formatter.dateFormat = "yyyy-MM-dd"; formatter.timeZone = .current; let day = formatter.string(from: date); return store.water.first { $0.day == day } ?? WaterDay(day: day, ml: 0) } }
 }
 
 struct PremiumSettingsView: View {
