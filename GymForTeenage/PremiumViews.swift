@@ -256,33 +256,27 @@ struct PremiumExerciseView: View {
     private func action(_ text: String, icon: String) -> some View { VStack(spacing: 6) { Image(systemName: icon); Text(text).font(.caption2.weight(.semibold)) }.foregroundStyle(.white).frame(maxWidth: .infinity).padding(.vertical, 12).background(TeenTheme.surface, in: RoundedRectangle(cornerRadius: 16)).overlay(RoundedRectangle(cornerRadius: 16).stroke(TeenTheme.line)) }
     private func notes(_ entry: ExerciseLog) -> some View { TeenCard(accent: TeenTheme.lime) { VStack(alignment: .leading, spacing: 8) { Text("Техника выполнения").font(.headline); TextEditor(text: Binding(get: { store.instructions[entry.exerciseID] ?? TechniqueGuide.instruction(for: entry.exerciseID) }, set: { store.instructions[entry.exerciseID] = $0; store.save() })).scrollContentBackground(.hidden).frame(minHeight: 150).padding(6).background(TeenTheme.raised, in: RoundedRectangle(cornerRadius: 14)); Text("Подсказка для безопасного выполнения. Выбирай комфортный вес и диапазон движения.").font(.caption2).foregroundStyle(TeenTheme.muted) } } }
     private func history(_ entry: ExerciseLog) -> some View {
-        let recent = store.exerciseHistory(for: entry.exerciseID).prefix(3)
+        let latest = store.exerciseHistory(for: entry.exerciseID).first
         return TeenCard {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Последние выполнения").font(.headline)
-                if recent.isEmpty {
-                    TeenEmpty(icon: "dumbbell", title: "Пока нет истории", detail: "Заверши тренировку, чтобы увидеть подходы, вес и повторения")
-                } else {
-                    ForEach(Array(recent), id: \.record.id) { item in
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text(item.record.name).font(.caption.weight(.semibold))
-                                Spacer()
-                                Text(item.record.date.formatted(date: .abbreviated, time: .omitted)).font(.caption2).foregroundStyle(TeenTheme.muted)
-                            }
-                            ForEach(Array(item.log.sets.enumerated()), id: \.offset) { i, set in
-                                HStack(spacing: 4) {
-                                    Text("\(i + 1)").font(.system(size: 8, weight: .bold)).foregroundStyle(TeenTheme.muted).frame(width: 14)
-                                    Text("\(set.weight) кг").font(.caption2).monospacedDigit()
-                                    Spacer()
-                                    Text("\(set.reps) повт.").font(.caption2).monospacedDigit()
-                                }
-                                .foregroundStyle(.white)
-                            }
+                HStack {
+                    Text("Предыдущая тренировка").font(.headline)
+                    Spacer()
+                    if let latest { Text(latest.record.date.ruLong).font(.caption2).foregroundStyle(TeenTheme.muted) }
+                }
+                if let latest {
+                    ForEach(Array(latest.log.sets.enumerated()), id: \.offset) { i, set in
+                        HStack(spacing: 6) {
+                            Text("подход \(i + 1)").font(.system(size: 9, weight: .bold)).foregroundStyle(TeenTheme.muted)
+                            Spacer()
+                            Text("\(set.weight) кг").font(.caption.weight(.semibold)).monospacedDigit()
+                            Text("\(set.reps) повт.").font(.caption.weight(.semibold)).monospacedDigit()
                         }
-                        .padding(8)
-                        .background(TeenTheme.raised, in: RoundedRectangle(cornerRadius: 10))
+                        .padding(.horizontal, 8).padding(.vertical, 5)
+                        .background(TeenTheme.raised, in: RoundedRectangle(cornerRadius: 8))
                     }
+                } else {
+                    Text("Пока нет истории — заверши тренировку, чтобы увидеть результат").font(.caption).foregroundStyle(TeenTheme.muted)
                 }
             }
         }
@@ -301,7 +295,7 @@ struct PremiumExerciseView: View {
     }
 }
 
-struct PremiumHistoryView: View { @Environment(Store.self) private var store; let exerciseID: String; var body: some View { List(store.records.filter { $0.exercises.contains { $0.exerciseID == exerciseID } }) { record in VStack(alignment: .leading) { Text(record.name).font(.headline); Text(record.date.formatted(date: .long, time: .shortened)).foregroundStyle(.secondary).font(.caption) } }.navigationTitle("История") } }
+struct PremiumHistoryView: View { @Environment(Store.self) private var store; let exerciseID: String; var body: some View { List(store.records.filter { $0.exercises.contains { $0.exerciseID == exerciseID } }) { record in VStack(alignment: .leading) { Text(record.name).font(.headline); Text(record.date.ruLong).foregroundStyle(.secondary).font(.caption) } }.navigationTitle("История") } }
 
 struct PremiumProgressView: View {
     @Environment(Store.self) private var store
@@ -318,7 +312,7 @@ struct PremiumProgressView: View {
     private func workoutBlock(_ workout: Training) -> some View {
         let records = Array(store.records.filter { $0.workoutID == workout.id }.prefix(6).reversed())
         let isExpanded = expandedWorkout == workout.id
-        return TeenCard(accent: TeenTheme.violet) { VStack(alignment: .leading, spacing: 12) { HStack { VStack(alignment: .leading, spacing: 3) { Text(workout.title).font(.headline); Text("\(records.count) завершений").font(.caption).foregroundStyle(TeenTheme.muted) }; Spacer(); Button { withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { expandedWorkout = isExpanded ? nil : workout.id } } label: { TeenPill(title: records.isEmpty ? "нет данных" : "\(short(records.last.map { Metrics.tonnage($0.exercises) } ?? 0)) кг", tint: TeenTheme.lime) }.buttonStyle(TeenPressStyle()) }; if records.isEmpty { TeenEmpty(icon: "chart.line.flattrend.xyaxis", title: "Первое выполнение впереди", detail: "Заверши тренировку, чтобы увидеть динамику тоннажа.") } else { Chart(records) { record in AreaMark(x: .value("Дата", record.date), y: .value("Тоннаж", Metrics.tonnage(record.exercises))).foregroundStyle(LinearGradient(colors: [TeenTheme.lime.opacity(0.35), .clear], startPoint: .top, endPoint: .bottom)); LineMark(x: .value("Дата", record.date), y: .value("Тоннаж", Metrics.tonnage(record.exercises))).foregroundStyle(TeenTheme.lime).lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round)); PointMark(x: .value("Дата", record.date), y: .value("Тоннаж", Metrics.tonnage(record.exercises))).foregroundStyle(TeenTheme.lime) }.frame(maxWidth: .infinity).frame(height: 110).chartXAxis(.hidden).chartYAxis(.hidden); ForEach(records.suffix(2)) { record in HStack { Text(record.date.formatted(date: .abbreviated, time: .omitted)).foregroundStyle(TeenTheme.muted); Spacer(); Text("\(short(Metrics.tonnage(record.exercises))) кг·повт.").fontWeight(.semibold) }.font(.caption) }; if isExpanded { exerciseProgression(workout: workout, records: records) } } } }
+        return TeenCard(accent: TeenTheme.violet) { VStack(alignment: .leading, spacing: 12) { HStack { VStack(alignment: .leading, spacing: 3) { Text(workout.title).font(.headline); Text("\(records.count) завершений").font(.caption).foregroundStyle(TeenTheme.muted) }; Spacer(); Button { withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { expandedWorkout = isExpanded ? nil : workout.id } } label: { TeenPill(title: records.isEmpty ? "нет данных" : "\(short(records.last.map { Metrics.tonnage($0.exercises) } ?? 0)) кг", tint: TeenTheme.lime) }.buttonStyle(TeenPressStyle()) }; if records.isEmpty { TeenEmpty(icon: "chart.line.flattrend.xyaxis", title: "Первое выполнение впереди", detail: "Заверши тренировку, чтобы увидеть динамику тоннажа.") } else { Chart(records) { record in AreaMark(x: .value("Дата", record.date), y: .value("Тоннаж", Metrics.tonnage(record.exercises))).foregroundStyle(LinearGradient(colors: [TeenTheme.lime.opacity(0.35), .clear], startPoint: .top, endPoint: .bottom)); LineMark(x: .value("Дата", record.date), y: .value("Тоннаж", Metrics.tonnage(record.exercises))).foregroundStyle(TeenTheme.lime).lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round)); PointMark(x: .value("Дата", record.date), y: .value("Тоннаж", Metrics.tonnage(record.exercises))).foregroundStyle(TeenTheme.lime) }.frame(maxWidth: .infinity).frame(height: 110).chartXAxis(.hidden).chartYAxis(.hidden); ForEach(records.suffix(2)) { record in HStack { Text(record.date.ruShort).foregroundStyle(TeenTheme.muted); Spacer(); Text("\(short(Metrics.tonnage(record.exercises))) кг·повт.").fontWeight(.semibold) }.font(.caption) }; if isExpanded { exerciseProgression(workout: workout, records: records) } } } }
     }
     private func exerciseProgression(workout: Training, records: [Record]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -330,7 +324,7 @@ struct PremiumProgressView: View {
                         Text(exercise.title).font(.caption2.weight(.semibold)).foregroundStyle(TeenTheme.muted)
                         ForEach(Array(exerciseHistory), id: \.record.id) { item in
                             HStack(spacing: 6) {
-                                Text(item.record.date.formatted(date: .abbreviated, time: .omitted)).font(.system(size: 8)).foregroundStyle(TeenTheme.muted).frame(width: 44)
+                                Text(item.record.date.ruShort)
                                 Text(item.log.sets.map { "\($0.weight)×\($0.reps)" }.joined(separator: " ")).font(.caption2).monospacedDigit()
                                 Spacer()
                                 Text("\(item.log.sets.count) подх.").font(.system(size: 8)).foregroundStyle(TeenTheme.muted)
@@ -392,17 +386,25 @@ private var frequency: some View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 180)
-        .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
-        .chartYAxis { AxisMarks(position: .leading) }
-        .chartLegend(.visible)
+        .chartXAxis {
+        AxisMarks(values: .automatic(desiredCount: 4)) { value in
+            if let date = value.as(Date.self) {
+                AxisValueLabel {
+                    Text(date.ruShort)
+                }
+            }
+        }
     }
+    .chartYAxis { AxisMarks(position: .leading) }
+    .chartLegend(.visible)
+}
     private var water: some View {
         let days = waterDays()
         return TeenCard(accent: TeenTheme.ice) { VStack(alignment: .leading, spacing: 12) { TeenSectionTitle("вода", detail: "7 дней"); Chart(days, id: \.day) { day in BarMark(x: .value("День", String(day.day.suffix(2))), y: .value("Мл", day.ml)).foregroundStyle(day.day == store.today ? TeenTheme.ice : TeenTheme.ice.opacity(0.35)).cornerRadius(5).annotation(position: .top) { if day.ml > 0 { Text("\(day.ml)").font(.caption2).foregroundStyle(TeenTheme.muted) } } }.frame(maxWidth: .infinity).frame(height: 170).chartYAxis { AxisMarks(position: .leading) } } }
     }
     private func measureChart(kind: String, title: String, tint: Color) -> some View {
         let values = store.measures.filter { $0.kind == kind && $0.date >= Calendar.current.date(byAdding: .month, value: -12, to: Date())! }.sorted { $0.date < $1.date }
-        return TeenCard(accent: tint) { VStack(alignment: .leading, spacing: 12) { TeenSectionTitle(title, detail: "12 месяцев"); if values.isEmpty { TeenEmpty(icon: kind == "weight" ? "scalemass" : "ruler", title: "Нет измерений", detail: "Добавь \(title), чтобы увидеть настоящую динамику.") } else { Chart(values) { value in AreaMark(x: .value("Дата", value.date), y: .value("Значение", value.value)).foregroundStyle(LinearGradient(colors: [tint.opacity(0.35), .clear], startPoint: .top, endPoint: .bottom)); LineMark(x: .value("Дата", value.date), y: .value("Значение", value.value)).foregroundStyle(tint).lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round)); PointMark(x: .value("Дата", value.date), y: .value("Значение", value.value)).foregroundStyle(tint) }.frame(maxWidth: .infinity).frame(height: 170).chartYAxis { AxisMarks(position: .leading) } } } }
+        return TeenCard(accent: tint) { VStack(alignment: .leading, spacing: 12) { TeenSectionTitle(title, detail: "12 месяцев"); if values.isEmpty { TeenEmpty(icon: kind == "weight" ? "scalemass" : "ruler", title: "Нет измерений", detail: "Добавь \(title), чтобы увидеть настоящую динамику.") } else { Chart(values) { value in AreaMark(x: .value("Дата", value.date), y: .value("Значение", value.value)).foregroundStyle(LinearGradient(colors: [tint.opacity(0.35), .clear], startPoint: .top, endPoint: .bottom)); LineMark(x: .value("Дата", value.date), y: .value("Значение", value.value)).foregroundStyle(tint).lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round)); PointMark(x: .value("Дата", value.date), y: .value("Значение", value.value)).foregroundStyle(tint) }.frame(maxWidth: .infinity).frame(height: 170).chartXAxis { AxisMarks { value in if let date = value.as(Date.self) { AxisValueLabel { Text(date.ruShort) } } } }.chartYAxis { AxisMarks(position: .leading) } } } }
     }
     private func count(_ component: Calendar.Component) -> Int { let now = Date(); let start = Calendar.current.dateInterval(of: component, for: now)?.start ?? now; return store.records.filter { $0.date >= start }.count }
     private var bestDay: String? {
