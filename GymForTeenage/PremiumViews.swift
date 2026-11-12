@@ -413,7 +413,7 @@ struct PremiumWorkoutDetailScreen: View {
                 Button("Удалить", role: .destructive) { deleteRecord() }
                 Button("Отмена", role: .cancel) { }
             } message: { Text("Тренировка будет безвозвратно удалена из истории.") }
-        }.padding(20).padding(.bottom, 24) }.background(TeenTheme.ink).navigationTitle(record.name).navigationBarTitleDisplayMode(.inline)
+        }.padding(20).padding(.bottom, 112) }.background(TeenTheme.ink).navigationTitle(record.name).navigationBarTitleDisplayMode(.inline)
     }
     private func deleteRecord() {
         store.records.removeAll { $0.id == record.id }
