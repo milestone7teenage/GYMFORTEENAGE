@@ -82,7 +82,7 @@ struct PremiumHomeView: View {
     private var workoutCarousel: some View {
         VStack(spacing: 10) {
             HStack {
-                Button(action: { withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                Button { withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                     if selectedWorkoutIndex > 0 { selectedWorkoutIndex -= 1 }
                 } } label: {
                     Image(systemName: "arrow.left")
@@ -90,7 +90,7 @@ struct PremiumHomeView: View {
                         .foregroundStyle(selectedWorkoutIndex == 0 ? TeenTheme.muted : TeenTheme.lime)
                         .frame(width: 30, height: 30)
                         .background(.ultraThinMaterial, in: Circle())
-                })
+                }
                 .buttonStyle(PlainButtonStyle())
                 .accessibilityLabel("Предыдущая тренировка")
                 Spacer()
@@ -98,7 +98,7 @@ struct PremiumHomeView: View {
                     .offset(x: dragOffset)
                     .gesture(workoutSwipeGesture)
                 Spacer()
-                Button(action: { withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                Button { withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                     if selectedWorkoutIndex < Catalog.workouts.count - 1 { selectedWorkoutIndex += 1 }
                 } } label: {
                     Image(systemName: "arrow.right")
@@ -106,7 +106,7 @@ struct PremiumHomeView: View {
                         .foregroundStyle(selectedWorkoutIndex == Catalog.workouts.count - 1 ? TeenTheme.muted : TeenTheme.lime)
                         .frame(width: 30, height: 30)
                         .background(.ultraThinMaterial, in: Circle())
-                })
+                }
                 .buttonStyle(PlainButtonStyle())
                 .accessibilityLabel("Следующая тренировка")
             }
