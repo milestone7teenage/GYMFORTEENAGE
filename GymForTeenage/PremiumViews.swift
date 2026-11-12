@@ -90,7 +90,7 @@ struct PremiumHomeView: View {
                         .foregroundStyle(selectedWorkoutIndex == 0 ? TeenTheme.muted : TeenTheme.lime)
                         .frame(width: 30, height: 30)
                         .background(.ultraThinMaterial, in: Circle())
-                }
+                })
                 .buttonStyle(PlainButtonStyle())
                 .accessibilityLabel("Предыдущая тренировка")
                 Spacer()
@@ -106,7 +106,7 @@ struct PremiumHomeView: View {
                         .foregroundStyle(selectedWorkoutIndex == Catalog.workouts.count - 1 ? TeenTheme.muted : TeenTheme.lime)
                         .frame(width: 30, height: 30)
                         .background(.ultraThinMaterial, in: Circle())
-                }
+                })
                 .buttonStyle(PlainButtonStyle())
                 .accessibilityLabel("Следующая тренировка")
             }
