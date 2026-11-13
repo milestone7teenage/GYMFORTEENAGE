@@ -15,7 +15,10 @@ jobs:
       - name: Confirm Xcode can read project and scheme
         run: xcodebuild -list -project GymForTeenage.xcodeproj
       - name: Build XCTest bundle with Simulator signing
-        run: xcodebuild build-for-testing -project GymForTeenage.xcodeproj -scheme GymForTeenage -destination 'platform=iOS Simulator,name=iPhone 16,arch=arm64' -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- AD_HOC_CODE_SIGNING_ALLOWED=YES
+        run: |
+          set -euo pipefail
+          echo "XCTEST_BUILD_STARTED_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
+          xcodebuild build-for-testing -project GymForTeenage.xcodeproj -scheme GymForTeenage -destination 'platform=iOS Simulator,name=iPhone 16,arch=arm64' -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- AD_HOC_CODE_SIGNING_ALLOWED=YES
       - name: Verify XCTest host and Keychain entitlements
         shell: bash
         run: |
@@ -42,11 +45,26 @@ jobs:
           fi
           echo "XCTest host verified: $TEST_HOST"
 
-          ENTITLEMENTS_RAW_PATH="build/app-host-entitlements.raw"
           ENTITLEMENTS_XML_PATH="build/app-host-entitlements.xml"
-          codesign --display --entitlements - --xml "$APP_PATH" > "$ENTITLEMENTS_RAW_PATH"
-          echo "codesign entitlement output format: $(file -b "$ENTITLEMENTS_RAW_PATH")"
-          plutil -convert xml1 -o "$ENTITLEMENTS_XML_PATH" "$ENTITLEMENTS_RAW_PATH"
+          APP_TARGET_BUILD_ROOT="build/DerivedData/Build/Intermediates.noindex/GymForTeenage.build"
+          ENTITLEMENTS_SOURCE_PATH="$(find "$APP_TARGET_BUILD_ROOT" -type f -path '*/GymForTeenage.build/GymForTeenage.app-Simulated.xcent' -print -quit)"
+          if [[ -z "$ENTITLEMENTS_SOURCE_PATH" || ! -s "$ENTITLEMENTS_SOURCE_PATH" ]]; then
+            echo "Xcode-generated Simulator entitlements for GymForTeenage.app were not found."
+            exit 1
+          fi
+          case "$ENTITLEMENTS_SOURCE_PATH" in
+            "$APP_TARGET_BUILD_ROOT"/*/GymForTeenage.build/GymForTeenage.app-Simulated.xcent) ;;
+            *) echo "Simulator entitlements are outside the GymForTeenage app target build directory."; exit 1 ;;
+          esac
+          ENTITLEMENTS_MTIME="$(stat -f %m "$ENTITLEMENTS_SOURCE_PATH")"
+          APP_EXECUTABLE_MTIME="$(stat -f %m "$APP_EXECUTABLE")"
+          if [[ "$ENTITLEMENTS_MTIME" -lt "$XCTEST_BUILD_STARTED_EPOCH" || "$APP_EXECUTABLE_MTIME" -lt "$XCTEST_BUILD_STARTED_EPOCH" ]]; then
+            echo "The app host or its Simulator entitlements predate this XCTest build."
+            exit 1
+          fi
+          echo "App host entitlements source: $ENTITLEMENTS_SOURCE_PATH"
+          echo "Xcode Simulator entitlement format: $(file -b "$ENTITLEMENTS_SOURCE_PATH")"
+          plutil -convert xml1 -o "$ENTITLEMENTS_XML_PATH" "$ENTITLEMENTS_SOURCE_PATH"
           plutil -lint "$ENTITLEMENTS_XML_PATH"
           cat "$ENTITLEMENTS_XML_PATH"
           python3 - "$APP_PATH/Info.plist" "$ENTITLEMENTS_XML_PATH" <<'PY'
@@ -58,25 +76,27 @@ jobs:
           with open(sys.argv[2], "rb") as entitlements_file:
               entitlements = plistlib.load(entitlements_file)
 
-          app_identifier = entitlements.get("application-identifier") or entitlements.get("com.apple.application-identifier")
+          app_identifier = entitlements.get("application-identifier")
           has_matching_app_identifier = (
               isinstance(app_identifier, str)
               and isinstance(bundle_id, str)
               and (app_identifier == bundle_id or app_identifier.endswith("." + bundle_id))
           )
-          access_groups = entitlements.get("keychain-access-groups", [])
-          has_accessible_keychain_group = isinstance(access_groups, list) and any(
-              isinstance(group, str) and group.strip() for group in access_groups
-          )
+          if not has_matching_app_identifier:
+              raise SystemExit("App host application-identifier is missing or does not match CFBundleIdentifier.")
 
-          if not has_matching_app_identifier and not has_accessible_keychain_group:
-              raise SystemExit(
-                  "App host has no matching application-identifier or non-empty Keychain access group entitlement."
-              )
+          if "keychain-access-groups" in entitlements:
+              access_groups = entitlements["keychain-access-groups"]
+              if not isinstance(access_groups, list) or not access_groups or any(
+                  not isinstance(group, str) or not group.strip() for group in access_groups
+              ):
+                  raise SystemExit("App host keychain-access-groups must be a non-empty array of non-empty strings.")
+              print(f"App host Keychain access groups: {access_groups}")
+          else:
+              print("App host Keychain access groups: not explicitly set; application-identifier is the default group.")
 
           print(f"App host bundle identifier: {bundle_id}")
           print(f"App host application identifier: {app_identifier}")
-          print(f"App host Keychain access groups: {access_groups}")
           PY
       - name: Run XCTest suite
         run: xcodebuild test-without-building -project GymForTeenage.xcodeproj -scheme GymForTeenage -destination 'platform=iOS Simulator,name=iPhone 16,arch=arm64' -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- AD_HOC_CODE_SIGNING_ALLOWED=YES
