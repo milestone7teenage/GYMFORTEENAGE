@@ -3,6 +3,18 @@ import Foundation
 
 protocol GeminiGenerating: Sendable {
     func generateContent(_ request: GeminiGenerateContentRequest, apiKey: String) async throws -> String
+    func generateInsightsContent(_ request: GeminiGenerateContentRequest, apiKey: String) async throws -> String
+    func generateChatContent(_ request: GeminiGenerateContentRequest, apiKey: String) async throws -> String
+}
+
+extension GeminiGenerating {
+    func generateInsightsContent(_ request: GeminiGenerateContentRequest, apiKey: String) async throws -> String {
+        try await generateContent(request, apiKey: apiKey)
+    }
+
+    func generateChatContent(_ request: GeminiGenerateContentRequest, apiKey: String) async throws -> String {
+        try await generateContent(request, apiKey: apiKey)
+    }
 }
 
 actor GeminiClient: GeminiGenerating {

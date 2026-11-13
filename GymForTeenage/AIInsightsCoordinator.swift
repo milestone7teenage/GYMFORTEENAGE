@@ -211,7 +211,7 @@ final class AIInsightsCoordinator {
     init(
         engine: AIInsightsEngine? = nil,
         cache: AIInsightsCache = AIInsightsCache(),
-        client: any GeminiGenerating = GeminiClient.shared
+        client: any GeminiGenerating = AIRequestCoordinator.shared
     ) {
         self.engine = engine ?? AIInsightsEngine()
         self.cache = cache
@@ -287,7 +287,7 @@ final class AIInsightsCoordinator {
             }
         }
         do {
-            let operation = Task { try await client.generateContent(request, apiKey: apiKey) }
+            let operation = Task { try await client.generateInsightsContent(request, apiKey: apiKey) }
             activeTask = operation
             let responseText = try await withTaskCancellationHandler {
                 try await operation.value

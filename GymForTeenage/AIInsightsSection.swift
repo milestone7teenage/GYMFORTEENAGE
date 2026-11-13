@@ -6,6 +6,7 @@ struct AIInsightsSection: View {
     @Environment(AIInsightsCoordinator.self) private var coordinator
     @AppStorage("aiCoachEnabled") private var isAIEnabled = false
     @State private var keychainError: String?
+    @State private var presentsChat = false
 
     var body: some View {
         TeenCard(accent: TeenTheme.violet) {
@@ -17,6 +18,13 @@ struct AIInsightsSection: View {
                         Text("Insights по тренировкам").font(.caption).foregroundStyle(TeenTheme.muted)
                     }
                     Spacer()
+                    Button { presentsChat = true } label: {
+                        Image(systemName: "bubble.left.and.bubble.right")
+                            .font(.subheadline.weight(.semibold)).foregroundStyle(TeenTheme.lime)
+                            .frame(width: 36, height: 36).background(TeenTheme.raised, in: Circle())
+                    }
+                    .buttonStyle(TeenPressStyle())
+                    .accessibilityLabel("Открыть чат AI Coach")
                     if coordinator.state.availability == .loading {
                         ProgressView().tint(TeenTheme.lime)
                     }
@@ -93,6 +101,9 @@ struct AIInsightsSection: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name.NSSystemTimeZoneDidChange)) { _ in
             Task { await refresh(force: false, allowGeneration: false) }
+        }
+        .sheet(isPresented: $presentsChat) {
+            AIChatView().environment(store).environment(coordinator).presentationDetents([.large])
         }
     }
 
