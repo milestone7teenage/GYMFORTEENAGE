@@ -25,9 +25,14 @@ jobs:
           EXPECTED_TEST_HOST="$PWD/$APP_EXECUTABLE"
           test -x "$APP_EXECUTABLE"
 
-          BUILD_SETTINGS="$(xcodebuild -showBuildSettings -project GymForTeenage.xcodeproj -target GymForTeenageTests -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 16' -derivedDataPath build/DerivedData)"
-          TEST_HOST="$(printf '%s\n' "$BUILD_SETTINGS" | awk '/^[[:space:]]*TEST_HOST = / { print $3; exit }')"
-          BUNDLE_LOADER="$(printf '%s\n' "$BUILD_SETTINGS" | awk '/^[[:space:]]*BUNDLE_LOADER = / { print $3; exit }')"
+          BUILD_SETTINGS="$(xcodebuild -showBuildSettings -project GymForTeenage.xcodeproj -scheme GymForTeenage -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 16' -derivedDataPath build/DerivedData)"
+          TEST_TARGET_SETTINGS="$(printf '%s\n' "$BUILD_SETTINGS" | awk '
+            /^Build settings for action .* and target GymForTeenageTests:/ { in_test_target = 1; next }
+            /^Build settings for action .* and target / { if (in_test_target) exit; in_test_target = 0 }
+            in_test_target { print }
+          ')"
+          TEST_HOST="$(printf '%s\n' "$TEST_TARGET_SETTINGS" | awk '/^[[:space:]]*TEST_HOST = / { print $3; exit }')"
+          BUNDLE_LOADER="$(printf '%s\n' "$TEST_TARGET_SETTINGS" | awk '/^[[:space:]]*BUNDLE_LOADER = / { print $3; exit }')"
           if [[ "$TEST_HOST" != "$EXPECTED_TEST_HOST" || "$BUNDLE_LOADER" != "$EXPECTED_TEST_HOST" ]]; then
             echo "GymForTeenageTests is not configured to load in the built app host."
             echo "TEST_HOST=$TEST_HOST"
