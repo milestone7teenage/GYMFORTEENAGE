@@ -19,7 +19,7 @@ final class GeminiClientTests: XCTestCase {
     func testSuccessUsesKeyHeaderAndDecodesText() async throws {
         let host = UUID().uuidString + ".test"
         let response = try Self.jsonResponse(text: "Keep a steady pace.")
-        GeminiURLProtocolStub.configure(host: host, replies: [.init(status: 200, data: response)])
+        GeminiURLProtocolStub.configure(host: host, replies: [response])
         defer { GeminiURLProtocolStub.remove(host: host) }
         let (client, session, endpoint) = Self.makeClient(host: host)
         defer { session.invalidateAndCancel() }
@@ -101,7 +101,7 @@ final class GeminiClientTests: XCTestCase {
         let success = try Self.jsonResponse(text: "Recovered")
         GeminiURLProtocolStub.configure(host: host, replies: [
             .init(status: 503, data: Data()),
-            .init(status: 200, data: success)
+            success
         ])
         defer { GeminiURLProtocolStub.remove(host: host) }
         let (client, session, _) = Self.makeClient(host: host, maximumRetries: 1)
@@ -141,7 +141,7 @@ final class GeminiClientTests: XCTestCase {
     func testIdenticalConcurrentRequestsShareOneNetworkOperation() async throws {
         let host = UUID().uuidString + ".test"
         let response = try Self.jsonResponse(text: "One response", delay: 0.2)
-        GeminiURLProtocolStub.configure(host: host, replies: [.init(status: 200, data: response)])
+        GeminiURLProtocolStub.configure(host: host, replies: [response])
         defer { GeminiURLProtocolStub.remove(host: host) }
         let (client, session, _) = Self.makeClient(host: host)
         defer { session.invalidateAndCancel() }
@@ -157,7 +157,7 @@ final class GeminiClientTests: XCTestCase {
     func testCancellingLastWaiterCancelsUnderlyingRequest() async throws {
         let host = UUID().uuidString + ".test"
         let response = try Self.jsonResponse(text: "Late", delay: 5)
-        GeminiURLProtocolStub.configure(host: host, replies: [.init(status: 200, data: response)])
+        GeminiURLProtocolStub.configure(host: host, replies: [response])
         defer { GeminiURLProtocolStub.remove(host: host) }
         let (client, session, _) = Self.makeClient(host: host)
         defer { session.invalidateAndCancel() }
@@ -178,7 +178,7 @@ final class GeminiClientTests: XCTestCase {
     func testResponseSizeLimitAndMissingKeyAreEnforced() async throws {
         let host = UUID().uuidString + ".test"
         let response = try Self.jsonResponse(text: "A response longer than the configured limit")
-        GeminiURLProtocolStub.configure(host: host, replies: [.init(status: 200, data: response)])
+        GeminiURLProtocolStub.configure(host: host, replies: [response])
         defer { GeminiURLProtocolStub.remove(host: host) }
         let (client, session, _) = Self.makeClient(host: host, maximumResponseBytes: 10)
         defer { session.invalidateAndCancel() }
@@ -206,7 +206,7 @@ final class GeminiClientTests: XCTestCase {
     func testTimeoutMapsToTypedErrorWithoutRetryWhenDisabled() async throws {
         let host = UUID().uuidString + ".test"
         let response = try Self.jsonResponse(text: "Late", delay: 1)
-        GeminiURLProtocolStub.configure(host: host, replies: [.init(status: 200, data: response)])
+        GeminiURLProtocolStub.configure(host: host, replies: [response])
         defer { GeminiURLProtocolStub.remove(host: host) }
         let (client, session, _) = Self.makeClient(host: host, timeout: 0.05, maximumRetries: 0)
         defer { session.invalidateAndCancel() }
