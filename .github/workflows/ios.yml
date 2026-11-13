@@ -14,8 +14,63 @@ jobs:
         run: plutil -lint GymForTeenage.xcodeproj/project.pbxproj
       - name: Confirm Xcode can read project and scheme
         run: xcodebuild -list -project GymForTeenage.xcodeproj
+      - name: Build XCTest bundle with Simulator signing
+        run: xcodebuild build-for-testing -project GymForTeenage.xcodeproj -scheme GymForTeenage -destination 'platform=iOS Simulator,name=iPhone 16' -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- AD_HOC_CODE_SIGNING_ALLOWED=YES
+      - name: Verify XCTest host and Keychain entitlements
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH="build/DerivedData/Build/Products/Debug-iphonesimulator/GymForTeenage.app"
+          APP_EXECUTABLE="$APP_PATH/GymForTeenage"
+          EXPECTED_TEST_HOST="$PWD/$APP_EXECUTABLE"
+          test -x "$APP_EXECUTABLE"
+
+          BUILD_SETTINGS="$(xcodebuild -showBuildSettings -project GymForTeenage.xcodeproj -target GymForTeenageTests -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 16' -derivedDataPath build/DerivedData)"
+          TEST_HOST="$(printf '%s\n' "$BUILD_SETTINGS" | awk '/^[[:space:]]*TEST_HOST = / { print $3; exit }')"
+          BUNDLE_LOADER="$(printf '%s\n' "$BUILD_SETTINGS" | awk '/^[[:space:]]*BUNDLE_LOADER = / { print $3; exit }')"
+          if [[ "$TEST_HOST" != "$EXPECTED_TEST_HOST" || "$BUNDLE_LOADER" != "$EXPECTED_TEST_HOST" ]]; then
+            echo "GymForTeenageTests is not configured to load in the built app host."
+            echo "TEST_HOST=$TEST_HOST"
+            echo "BUNDLE_LOADER=$BUNDLE_LOADER"
+            echo "Expected=$EXPECTED_TEST_HOST"
+            exit 1
+          fi
+          echo "XCTest host verified: $TEST_HOST"
+
+          ENTITLEMENTS_PATH="build/app-host-entitlements.plist"
+          codesign -d --entitlements :- "$APP_PATH" > "$ENTITLEMENTS_PATH"
+          cat "$ENTITLEMENTS_PATH"
+          python3 - "$APP_PATH/Info.plist" "$ENTITLEMENTS_PATH" <<'PY'
+          import plistlib
+          import sys
+
+          with open(sys.argv[1], "rb") as info_file:
+              bundle_id = plistlib.load(info_file).get("CFBundleIdentifier")
+          with open(sys.argv[2], "rb") as entitlements_file:
+              entitlements = plistlib.load(entitlements_file)
+
+          app_identifier = entitlements.get("application-identifier") or entitlements.get("com.apple.application-identifier")
+          has_matching_app_identifier = (
+              isinstance(app_identifier, str)
+              and isinstance(bundle_id, str)
+              and (app_identifier == bundle_id or app_identifier.endswith("." + bundle_id))
+          )
+          access_groups = entitlements.get("keychain-access-groups", [])
+          has_accessible_keychain_group = isinstance(access_groups, list) and any(
+              isinstance(group, str) and group.strip() for group in access_groups
+          )
+
+          if not has_matching_app_identifier and not has_accessible_keychain_group:
+              raise SystemExit(
+                  "App host has no matching application-identifier or non-empty Keychain access group entitlement."
+              )
+
+          print(f"App host bundle identifier: {bundle_id}")
+          print(f"App host application identifier: {app_identifier}")
+          print(f"App host Keychain access groups: {access_groups}")
+          PY
       - name: Run XCTest suite
-        run: xcodebuild test -project GymForTeenage.xcodeproj -scheme GymForTeenage -destination 'platform=iOS Simulator,name=iPhone 16' CODE_SIGNING_ALLOWED=NO
+        run: xcodebuild test-without-building -project GymForTeenage.xcodeproj -scheme GymForTeenage -destination 'platform=iOS Simulator,name=iPhone 16' -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- AD_HOC_CODE_SIGNING_ALLOWED=YES
       - name: Xcode static analysis
         run: xcodebuild analyze -project GymForTeenage.xcodeproj -scheme GymForTeenage -destination 'platform=iOS Simulator,name=iPhone 16' CODE_SIGNING_ALLOWED=NO
       - name: Archive without personal signing
