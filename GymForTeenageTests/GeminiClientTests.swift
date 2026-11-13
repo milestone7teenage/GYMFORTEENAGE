@@ -24,16 +24,29 @@ final class GeminiClientTests: XCTestCase {
         let (client, session, endpoint) = Self.makeClient(host: host)
         defer { session.invalidateAndCancel() }
 
+        let outbound = GeminiGenerateContentRequest(
+            contents: Self.request.contents,
+            systemInstruction: AIConfiguration.systemInstruction,
+            generationConfig: Self.request.generationConfig
+        )
+        let body = try JSONEncoder().encode(outbound)
+        let urlRequest = GeminiURLRequestFactory.make(
+            body: body,
+            apiKey: "test-api-key",
+            endpoint: endpoint,
+            timeoutInterval: 2
+        )
+        XCTAssertFalse(String(decoding: try XCTUnwrap(urlRequest.httpBody), as: UTF8.self).contains("test-api-key"))
+        XCTAssertNil(URLComponents(url: try XCTUnwrap(urlRequest.url), resolvingAgainstBaseURL: false)?.query)
+        XCTAssertEqual(urlRequest.value(forHTTPHeaderField: "x-goog-api-key"), "test-api-key")
+
         let text = try await client.generateContent(Self.request, apiKey: "test-api-key")
 
         XCTAssertEqual(text, "Keep a steady pace.")
         let captured = try XCTUnwrap(GeminiURLProtocolStub.requests(for: host).first)
         XCTAssertEqual(captured.value(forHTTPHeaderField: "x-goog-api-key"), "test-api-key")
         XCTAssertEqual(captured.httpMethod, "POST")
-        let body = String(decoding: try XCTUnwrap(captured.httpBody), as: UTF8.self)
-        XCTAssertFalse(body.contains("test-api-key"))
-        XCTAssertTrue(body.contains("systemInstruction"))
-        XCTAssertFalse(body.localizedCaseInsensitiveContains("googleSearch"))
+        XCTAssertFalse(String(decoding: try XCTUnwrap(urlRequest.httpBody), as: UTF8.self).localizedCaseInsensitiveContains("googleSearch"))
         XCTAssertTrue(endpoint.absoluteString.hasPrefix("https://"))
     }
 

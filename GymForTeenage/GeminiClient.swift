@@ -81,6 +81,7 @@ actor GeminiClient {
             effectiveRequest.systemInstruction = GeminiContent(text: AIConfiguration.systemInstruction)
         }
         let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
         guard let body = try? encoder.encode(effectiveRequest) else { throw GeminiClientError.invalidRequest }
         var fingerprintInput = Data(normalizedKey.utf8)
         fingerprintInput.append(0)
@@ -209,12 +210,12 @@ actor GeminiClient {
         responseLimit: Int,
         defaultRateLimitDelay: TimeInterval
     ) async throws -> String {
-        var urlRequest = URLRequest(url: endpoint, timeoutInterval: min(timeout, resourceTimeout))
-        urlRequest.httpMethod = "POST"
-        urlRequest.httpBody = body
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
-        urlRequest.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
+        let urlRequest = GeminiURLRequestFactory.make(
+            body: body,
+            apiKey: apiKey,
+            endpoint: endpoint,
+            timeoutInterval: min(timeout, resourceTimeout)
+        )
 
         var data = Data()
         data.reserveCapacity(min(responseLimit, 4096))
@@ -280,5 +281,17 @@ actor GeminiClient {
         formatter.dateFormat = "EEE',' dd MMM yyyy HH':'mm':'ss z"
         if let date = formatter.date(from: value) { return max(1, date.timeIntervalSinceNow) }
         return fallback
+    }
+}
+
+enum GeminiURLRequestFactory {
+    static func make(body: Data, apiKey: String, endpoint: URL, timeoutInterval: TimeInterval) -> URLRequest {
+        var request = URLRequest(url: endpoint, timeoutInterval: timeoutInterval)
+        request.httpMethod = "POST"
+        request.httpBody = body
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
+        return request
     }
 }
