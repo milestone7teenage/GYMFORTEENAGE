@@ -41,7 +41,13 @@ final class AIKeychainStoreTests: XCTestCase {
         let secret = "isolated-test-secret-\(UUID().uuidString)"
         let keyStore = AIKeychainStore(service: "com.gymforteenage.tests.backup.\(UUID().uuidString)")
         try keyStore.save(key: secret)
-        defer { try? keyStore.deleteKey() }
+        defer {
+            do {
+                try keyStore.deleteKey()
+            } catch {
+                XCTFail("Failed to remove isolated Keychain test item: \(error)")
+            }
+        }
 
         let localURL = FileManager.default.temporaryDirectory.appendingPathComponent("ai-backup-store-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: localURL) }
@@ -51,11 +57,14 @@ final class AIKeychainStoreTests: XCTestCase {
         let data = try Data(contentsOf: exportedURL)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         let decodedBackup = try JSONDecoder.iso.decode(Backup.self, from: data)
-        let expectedBackupFields: Set<String> = [
-            "formatIdentifier", "version", "records", "measures", "water", "session",
+        let requiredBackupFields: Set<String> = [
+            "formatIdentifier", "version", "records", "measures", "water",
             "instructions", "reminders", "creatineLog", "creatineReminder", "creatineHour"
         ]
-        XCTAssertTrue(expectedBackupFields.isSubset(of: Set(json.keys)))
+        let serializedFields = Set(json.keys)
+        let optionalBackupFields: Set<String> = ["session"]
+        XCTAssertTrue(requiredBackupFields.isSubset(of: serializedFields))
+        XCTAssertTrue(serializedFields.isSubset(of: requiredBackupFields.union(optionalBackupFields)))
         XCTAssertEqual(decodedBackup.version, 1)
         XCTAssertEqual(recursivelyForbiddenJSONPaths(in: json, secret: secret), [])
         XCTAssertEqual(try keyStore.retrieveKey(), secret)
@@ -65,6 +74,7 @@ final class AIKeychainStoreTests: XCTestCase {
         let artificialJSON: [String: Any] = [
             "outer": [
                 "aiCoachEnabled": true,
+                "test-secret-as-key": "placeholder",
                 "items": [
                     ["AI_Consent": true],
                     ["api-key": "fake-key", "GeminiModel": "test-model"]
@@ -75,6 +85,7 @@ final class AIKeychainStoreTests: XCTestCase {
         let violations = recursivelyForbiddenJSONPaths(in: artificialJSON, secret: "test-secret")
         XCTAssertEqual(Set(violations), [
             "$.outer.aiCoachEnabled",
+            "$.outer.[redacted-key]",
             "$.outer.items[0].AI_Consent",
             "$.outer.items[1].api-key",
             "$.outer.items[1].GeminiModel"
@@ -87,12 +98,14 @@ final class AIKeychainStoreTests: XCTestCase {
                 let key = entry.key
                 let nestedValue = entry.value
                 let childPath = "\(path).\(key)"
+                let keyContainsSecret = key.localizedCaseInsensitiveContains(secret)
+                let safeChildPath = keyContainsSecret ? "\(path).[redacted-key]" : childPath
                 let normalizedKey = key.lowercased().filter { $0.isLetter || $0.isNumber }
                 let forbiddenName = normalizedKey.hasPrefix("ai")
                     || ["apikey", "gemini", "keychain"]
                     .contains { normalizedKey.contains($0) }
-                return (forbiddenName ? [childPath] : [])
-                    + recursivelyForbiddenJSONPaths(in: nestedValue, path: childPath, secret: secret)
+                return ((forbiddenName || keyContainsSecret) ? [safeChildPath] : [])
+                    + recursivelyForbiddenJSONPaths(in: nestedValue, path: safeChildPath, secret: secret)
             }
         }
         if let array = value as? [Any] {
