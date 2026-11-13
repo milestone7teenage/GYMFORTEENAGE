@@ -36,6 +36,7 @@ final class AIKeychainStoreTests: XCTestCase {
         }
     }
 
+    @MainActor
     func testBackupDoesNotContainKeyOrAISettings() throws {
         let secret = "isolated-test-secret-\(UUID().uuidString)"
         let keyStore = AIKeychainStore(service: "com.gymforteenage.tests.backup.\(UUID().uuidString)")
