@@ -15,7 +15,7 @@ jobs:
       - name: Confirm Xcode can read project and scheme
         run: xcodebuild -list -project GymForTeenage.xcodeproj
       - name: Build XCTest bundle with Simulator signing
-        run: xcodebuild build-for-testing -project GymForTeenage.xcodeproj -scheme GymForTeenage -destination 'platform=iOS Simulator,name=iPhone 16' -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- AD_HOC_CODE_SIGNING_ALLOWED=YES
+        run: xcodebuild build-for-testing -project GymForTeenage.xcodeproj -scheme GymForTeenage -destination 'platform=iOS Simulator,name=iPhone 16,arch=arm64' -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- AD_HOC_CODE_SIGNING_ALLOWED=YES
       - name: Verify XCTest host and Keychain entitlements
         shell: bash
         run: |
@@ -25,7 +25,7 @@ jobs:
           EXPECTED_TEST_HOST="$PWD/$APP_EXECUTABLE"
           test -x "$APP_EXECUTABLE"
 
-          BUILD_SETTINGS="$(xcodebuild -showBuildSettings -project GymForTeenage.xcodeproj -scheme GymForTeenage -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 16' -derivedDataPath build/DerivedData)"
+          BUILD_SETTINGS="$(xcodebuild -showBuildSettings -project GymForTeenage.xcodeproj -scheme GymForTeenage -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 16,arch=arm64' -derivedDataPath build/DerivedData test)"
           TEST_TARGET_SETTINGS="$(printf '%s\n' "$BUILD_SETTINGS" | awk '
             /^Build settings for action .* and target GymForTeenageTests:/ { in_test_target = 1; next }
             /^Build settings for action .* and target / { if (in_test_target) exit; in_test_target = 0 }
@@ -75,7 +75,7 @@ jobs:
           print(f"App host Keychain access groups: {access_groups}")
           PY
       - name: Run XCTest suite
-        run: xcodebuild test-without-building -project GymForTeenage.xcodeproj -scheme GymForTeenage -destination 'platform=iOS Simulator,name=iPhone 16' -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- AD_HOC_CODE_SIGNING_ALLOWED=YES
+        run: xcodebuild test-without-building -project GymForTeenage.xcodeproj -scheme GymForTeenage -destination 'platform=iOS Simulator,name=iPhone 16,arch=arm64' -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- AD_HOC_CODE_SIGNING_ALLOWED=YES
       - name: Xcode static analysis
         run: xcodebuild analyze -project GymForTeenage.xcodeproj -scheme GymForTeenage -destination 'platform=iOS Simulator,name=iPhone 16' CODE_SIGNING_ALLOWED=NO
       - name: Archive without personal signing
