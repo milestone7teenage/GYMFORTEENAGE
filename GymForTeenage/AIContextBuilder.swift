@@ -1,6 +1,7 @@
 import Foundation
 
 enum AIDataCategory: String, Codable, CaseIterable, Hashable {
+    case chatMessages
     case exerciseHistory
     case waterIntake
     case bodyMeasurements

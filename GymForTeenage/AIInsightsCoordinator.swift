@@ -222,7 +222,7 @@ final class AIInsightsCoordinator {
         store: Store,
         isAIEnabled: Bool,
         apiKey: String?,
-        allowsPersonalData: Bool = false,
+        consentedCategories: Set<AIDataCategory> = [],
         allowGeneration: Bool = true,
         forceRefresh: Bool = false,
         now: Date = Date()
@@ -249,11 +249,12 @@ final class AIInsightsCoordinator {
         }
         if !allowGeneration {
             let hasKey = apiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            let hasConsent = consentedCategories.contains(.weeklyInsights)
             state = AIInsightsViewState(
-                availability: hasKey ? .consentRequired : .missingKey,
+                availability: hasKey ? (hasConsent ? .ready : .consentRequired) : .missingKey,
                 insights: previousInsights,
                 isStale: previousInsights != nil,
-                message: hasKey ? "Для обновления нужно отдельно подтвердить передачу показателей в Google Gemini." : "Сохрани API-ключ Gemini в настройках, чтобы запросить Insights."
+                message: !hasKey ? "Сохрани API-ключ Gemini в настройках, чтобы запросить Insights." : (hasConsent ? "Сводка не обновляется автоматически. Нажми кнопку, когда захочешь отправить показатели в Google Gemini." : "Перед анализом нужно отдельно подтвердить отправку недельных показателей в Google Gemini.")
             )
             return
         }
@@ -264,7 +265,7 @@ final class AIInsightsCoordinator {
             state = AIInsightsViewState(availability: .missingKey, insights: previousInsights, isStale: previousInsights != nil, message: "Сохрани API-ключ Gemini в настройках.")
             return
         }
-        guard allowsPersonalData else {
+        guard consentedCategories.contains(.weeklyInsights) else {
             state = AIInsightsViewState(availability: .consentRequired, insights: previousInsights, isStale: previousInsights != nil, message: "Перед анализом нужно разрешить отправку недельных показателей в Google Gemini.")
             return
         }

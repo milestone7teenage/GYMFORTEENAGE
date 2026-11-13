@@ -76,9 +76,11 @@ final class AIInsightsCoordinatorTests: XCTestCase {
         let client = InsightsGeminiStub(response: Self.validResponse)
         let coordinator = AIInsightsCoordinator(cache: AIInsightsCache(fileURL: cacheURL), client: client)
 
-        await coordinator.refresh(store: store, isAIEnabled: false, apiKey: "test-key", allowsPersonalData: true)
+        await coordinator.refresh(store: store, isAIEnabled: false, apiKey: "test-key", consentedCategories: [.weeklyInsights])
         XCTAssertEqual(coordinator.state.availability, .disabled)
-        await coordinator.refresh(store: store, isAIEnabled: true, apiKey: "test-key", allowsPersonalData: true, allowGeneration: false)
+        await coordinator.refresh(store: store, isAIEnabled: true, apiKey: "test-key", consentedCategories: [], allowGeneration: false)
+        XCTAssertEqual(coordinator.state.availability, .consentRequired)
+        await coordinator.refresh(store: store, isAIEnabled: true, apiKey: "test-key", consentedCategories: [])
         XCTAssertEqual(coordinator.state.availability, .consentRequired)
         let disabledRequestCount = await client.count()
         XCTAssertEqual(disabledRequestCount, 0)
@@ -91,9 +93,9 @@ final class AIInsightsCoordinatorTests: XCTestCase {
         let client = InsightsGeminiStub(response: Self.validResponse)
         let coordinator = AIInsightsCoordinator(cache: AIInsightsCache(fileURL: cacheURL), client: client)
 
-        await coordinator.refresh(store: store, isAIEnabled: true, apiKey: "test-key", allowsPersonalData: true)
+        await coordinator.refresh(store: store, isAIEnabled: true, apiKey: "test-key", consentedCategories: [.weeklyInsights])
         XCTAssertEqual(coordinator.state.availability, .ready)
-        await coordinator.refresh(store: store, isAIEnabled: true, apiKey: "test-key", allowsPersonalData: true)
+        await coordinator.refresh(store: store, isAIEnabled: true, apiKey: "test-key", consentedCategories: [.weeklyInsights])
 
         let cachedRequestCount = await client.count()
         XCTAssertEqual(cachedRequestCount, 1)
@@ -107,12 +109,12 @@ final class AIInsightsCoordinatorTests: XCTestCase {
         await client.setFailure(true)
         let coordinator = AIInsightsCoordinator(cache: AIInsightsCache(fileURL: cacheURL), client: client)
 
-        await coordinator.refresh(store: store, isAIEnabled: true, apiKey: "test-key", allowsPersonalData: true)
-        await coordinator.refresh(store: store, isAIEnabled: true, apiKey: "test-key", allowsPersonalData: true)
+        await coordinator.refresh(store: store, isAIEnabled: true, apiKey: "test-key", consentedCategories: [.weeklyInsights])
+        await coordinator.refresh(store: store, isAIEnabled: true, apiKey: "test-key", consentedCategories: [.weeklyInsights])
         let cachedRequestCount = await client.count()
         XCTAssertEqual(cachedRequestCount, 1)
         await client.setFailure(false)
-        await coordinator.refresh(store: store, isAIEnabled: true, apiKey: "test-key", allowsPersonalData: true, forceRefresh: true)
+        await coordinator.refresh(store: store, isAIEnabled: true, apiKey: "test-key", consentedCategories: [.weeklyInsights], forceRefresh: true)
 
         let retriedRequestCount = await client.count()
         XCTAssertEqual(retriedRequestCount, 2)

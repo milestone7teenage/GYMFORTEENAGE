@@ -87,7 +87,7 @@ final class AIRequestCoordinatorTests: XCTestCase {
             store: store,
             apiKey: "test-key",
             isAIEnabled: true,
-            allowsPersonalData: false
+            consentedCategories: []
         )
 
         XCTAssertFalse(consumed)
@@ -116,7 +116,7 @@ final class AIRequestCoordinatorTests: XCTestCase {
             store: store,
             apiKey: "test-key",
             isAIEnabled: true,
-            allowsPersonalData: true
+            consentedCategories: [.chatMessages, .exerciseHistory]
         )
 
         XCTAssertTrue(consumed)
@@ -133,6 +133,60 @@ final class AIRequestCoordinatorTests: XCTestCase {
         XCTAssertTrue(session.messages.isEmpty)
     }
 
+    func testChatRequiresConsentForEveryCategoryBeforeSending() async throws {
+        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+        let store = Store(fileURL: fileURL)
+        store.records = [record(date: Date())]
+        let client = RequestCoordinatorStub()
+        let session = AICoachSession(requestCoordinator: AIRequestCoordinator(client: client))
+
+        let consumed = await session.send(
+            "Как менялась бабочка за неделю?",
+            store: store,
+            apiKey: "test-key",
+            isAIEnabled: true,
+            consentedCategories: [.chatMessages]
+        )
+
+        XCTAssertFalse(consumed)
+        XCTAssertEqual(session.availability, .consentRequired)
+        XCTAssertTrue(session.pendingConsentCategories.contains(.exerciseHistory))
+        let counts = await client.counts()
+        XCTAssertEqual(counts.requests, 0)
+    }
+
+    func testChatRequiresConsentForCategoriesAlreadyInSessionHistory() async throws {
+        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+        let store = Store(fileURL: fileURL)
+        store.records = [record(date: Date())]
+        let client = RequestCoordinatorStub()
+        let session = AICoachSession(requestCoordinator: AIRequestCoordinator(client: client))
+
+        let firstConsumed = await session.send(
+            "Как менялась бабочка за неделю?",
+            store: store,
+            apiKey: "test-key",
+            isAIEnabled: true,
+            consentedCategories: [.chatMessages, .exerciseHistory]
+        )
+        XCTAssertTrue(firstConsumed)
+
+        let secondConsumed = await session.send(
+            "Сколько воды я пил за неделю?",
+            store: store,
+            apiKey: "test-key",
+            isAIEnabled: true,
+            consentedCategories: [.chatMessages, .waterIntake]
+        )
+
+        XCTAssertFalse(secondConsumed)
+        XCTAssertTrue(session.pendingConsentCategories.contains(.exerciseHistory))
+        let counts = await client.counts()
+        XCTAssertEqual(counts.requests, 1)
+    }
+
     func testFailedChatCanBeRetriedWithoutDuplicatingTheUserMessage() async throws {
         let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
         defer { try? FileManager.default.removeItem(at: fileURL) }
@@ -143,11 +197,11 @@ final class AIRequestCoordinatorTests: XCTestCase {
         let session = AICoachSession(requestCoordinator: AIRequestCoordinator(client: client))
         let question = "Как менялась бабочка за неделю?"
 
-        _ = await session.send(question, store: store, apiKey: "test-key", isAIEnabled: true, allowsPersonalData: true)
+        _ = await session.send(question, store: store, apiKey: "test-key", isAIEnabled: true, consentedCategories: [.chatMessages, .exerciseHistory])
         XCTAssertTrue(session.canRetry)
         XCTAssertEqual(session.messages.filter { $0.role == .user }.count, 1)
 
-        _ = await session.retryLast(store: store, apiKey: "test-key", isAIEnabled: true, allowsPersonalData: true)
+        _ = await session.retryLast(store: store, apiKey: "test-key", isAIEnabled: true, consentedCategories: [.chatMessages, .exerciseHistory])
 
         XCTAssertFalse(session.canRetry)
         XCTAssertEqual(session.messages.filter { $0.role == .user }.count, 1)

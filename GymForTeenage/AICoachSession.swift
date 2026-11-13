@@ -44,6 +44,8 @@ final class AICoachSession {
     private(set) var availability: AIChatAvailability = .idle
     private(set) var isSending = false
     private(set) var canRetry = false
+    private(set) var pendingConsentCategories: Set<AIDataCategory> = []
+    private(set) var sessionDataCategories: Set<AIDataCategory> = []
 
     private let requestCoordinator: AIRequestCoordinator
     private let contextBuilder: AIContextBuilder
@@ -69,7 +71,7 @@ final class AICoachSession {
         store: Store,
         apiKey: String?,
         isAIEnabled: Bool,
-        allowsPersonalData: Bool = false
+        consentedCategories: Set<AIDataCategory> = []
     ) async -> Bool {
         guard !isSending else { return false }
         let question = rawQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -96,17 +98,15 @@ final class AICoachSession {
             return true
         }
 
-        if selection.isPersonal && !allowsPersonalData {
-            activeScope = selection.scope
+        let requiredCategories = selection.categories.union(sessionDataCategories).union([.chatMessages])
+        guard requiredCategories.isSubset(of: consentedCategories) else {
+            pendingConsentCategories = requiredCategories.subtracting(consentedCategories)
+            activeScope = selection.scope ?? activeScope
             availability = .consentRequired
             return false
         }
-        // Chat text itself may contain personal details, so the first implementation
-        // keeps every outbound chat behind the same explicit consent gate.
-        guard allowsPersonalData else {
-            availability = .consentRequired
-            return false
-        }
+        pendingConsentCategories = []
+        sessionDataCategories.formUnion(requiredCategories)
 
         activeScope = selection.scope ?? activeScope
         let selectedData = try? selectedDataJSON(for: selection, store: store)
@@ -190,7 +190,7 @@ final class AICoachSession {
         store: Store,
         apiKey: String?,
         isAIEnabled: Bool,
-        allowsPersonalData: Bool = false
+        consentedCategories: Set<AIDataCategory> = []
     ) async -> Bool {
         guard canRetry, !isSending,
               let question = messages.last(where: { $0.role == .user })?.text else { return false }
@@ -202,7 +202,7 @@ final class AICoachSession {
             store: store,
             apiKey: apiKey,
             isAIEnabled: isAIEnabled,
-            allowsPersonalData: allowsPersonalData
+            consentedCategories: consentedCategories
         )
     }
 
@@ -216,6 +216,8 @@ final class AICoachSession {
         activeRequest = nil
         messages.removeAll(keepingCapacity: false)
         activeScope = nil
+        pendingConsentCategories = []
+        sessionDataCategories = []
         startingInsights = nil
         isSending = false
         canRetry = false

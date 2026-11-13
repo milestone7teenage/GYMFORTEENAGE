@@ -38,6 +38,24 @@ final class AIKeychainStoreTests: XCTestCase {
 
     @MainActor
     func testBackupDoesNotContainKeyOrAISettings() throws {
+        let defaults = UserDefaults.standard
+        let previousConsentCategories = defaults.object(forKey: "aiCoachConsentCategories")
+        let previousConsentVersion = defaults.object(forKey: "aiCoachConsentVersion")
+        let consentStore = AIConsentStore(defaults: defaults)
+        consentStore.grant([.chatMessages, .weeklyInsights])
+        defer {
+            if let previousConsentCategories {
+                defaults.set(previousConsentCategories, forKey: "aiCoachConsentCategories")
+            } else {
+                defaults.removeObject(forKey: "aiCoachConsentCategories")
+            }
+            if let previousConsentVersion {
+                defaults.set(previousConsentVersion, forKey: "aiCoachConsentVersion")
+            } else {
+                defaults.removeObject(forKey: "aiCoachConsentVersion")
+            }
+        }
+
         let secret = "isolated-test-secret-\(UUID().uuidString)"
         let keyStore = AIKeychainStore(service: "com.gymforteenage.tests.backup.\(UUID().uuidString)")
         try keyStore.save(key: secret)
@@ -55,6 +73,7 @@ final class AIKeychainStoreTests: XCTestCase {
         let exportedURL = try XCTUnwrap(store.export())
         defer { try? FileManager.default.removeItem(at: exportedURL) }
         let data = try Data(contentsOf: exportedURL)
+        let jsonText = try XCTUnwrap(String(data: data, encoding: .utf8))
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         let decodedBackup = try JSONDecoder.iso.decode(Backup.self, from: data)
         let requiredBackupFields: Set<String> = [
@@ -67,6 +86,9 @@ final class AIKeychainStoreTests: XCTestCase {
         XCTAssertTrue(serializedFields.isSubset(of: requiredBackupFields.union(optionalBackupFields)))
         XCTAssertEqual(decodedBackup.version, 1)
         XCTAssertEqual(recursivelyForbiddenJSONPaths(in: json, secret: secret), [])
+        XCTAssertFalse(jsonText.localizedCaseInsensitiveContains("aiCoachConsent"))
+        XCTAssertFalse(jsonText.localizedCaseInsensitiveContains("weeklyInsights"))
+        XCTAssertFalse(jsonText.localizedCaseInsensitiveContains("chatMessages"))
         XCTAssertEqual(try keyStore.retrieveKey(), secret)
     }
 
