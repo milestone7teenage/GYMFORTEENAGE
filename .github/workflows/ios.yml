@@ -42,10 +42,14 @@ jobs:
           fi
           echo "XCTest host verified: $TEST_HOST"
 
-          ENTITLEMENTS_PATH="build/app-host-entitlements.plist"
-          codesign -d --entitlements :- "$APP_PATH" > "$ENTITLEMENTS_PATH"
-          cat "$ENTITLEMENTS_PATH"
-          python3 - "$APP_PATH/Info.plist" "$ENTITLEMENTS_PATH" <<'PY'
+          ENTITLEMENTS_RAW_PATH="build/app-host-entitlements.raw"
+          ENTITLEMENTS_XML_PATH="build/app-host-entitlements.xml"
+          codesign --display --entitlements - --xml "$APP_PATH" > "$ENTITLEMENTS_RAW_PATH"
+          echo "codesign entitlement output format: $(file -b "$ENTITLEMENTS_RAW_PATH")"
+          plutil -convert xml1 -o "$ENTITLEMENTS_XML_PATH" "$ENTITLEMENTS_RAW_PATH"
+          plutil -lint "$ENTITLEMENTS_XML_PATH"
+          cat "$ENTITLEMENTS_XML_PATH"
+          python3 - "$APP_PATH/Info.plist" "$ENTITLEMENTS_XML_PATH" <<'PY'
           import plistlib
           import sys
 
