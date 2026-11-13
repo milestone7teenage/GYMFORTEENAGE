@@ -43,10 +43,15 @@ struct AIChatView: View {
                 }
 
                 if let statusMessage {
-                    Text(statusMessage)
-                        .font(.caption).foregroundStyle(statusIsError ? .orange : TeenTheme.muted)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 16).padding(.bottom, 8)
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(statusMessage).font(.caption).foregroundStyle(statusIsError ? .orange : TeenTheme.muted)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        if session.canRetry {
+                            Button("Повторить") { retry() }
+                                .font(.caption.weight(.semibold)).foregroundStyle(TeenTheme.lime)
+                        }
+                    }
+                    .padding(.horizontal, 16).padding(.bottom, 8)
                 }
 
                 HStack(alignment: .bottom, spacing: 10) {
@@ -143,6 +148,25 @@ struct AIChatView: View {
                     allowsPersonalData: false
                 )
                 if consumed { draft = "" }
+            } catch {
+                session.setLocalError("Не удалось проверить API-ключ в защищённом хранилище. Повтори проверку в настройках.")
+            }
+        }
+    }
+
+    private func retry() {
+        Task {
+            do {
+                guard let apiKey = try AIKeychainStore().retrieveKey() else {
+                    session.setLocalError("API-ключ не найден. Добавь его в настройках, затем повтори запрос.")
+                    return
+                }
+                _ = await session.retryLast(
+                    store: store,
+                    apiKey: apiKey,
+                    isAIEnabled: isAIEnabled,
+                    allowsPersonalData: false
+                )
             } catch {
                 session.setLocalError("Не удалось проверить API-ключ в защищённом хранилище. Повтори проверку в настройках.")
             }

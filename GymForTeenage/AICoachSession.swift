@@ -43,6 +43,7 @@ final class AICoachSession {
     private(set) var activeScope: AIContextScope?
     private(set) var availability: AIChatAvailability = .idle
     private(set) var isSending = false
+    private(set) var canRetry = false
 
     private let requestCoordinator: AIRequestCoordinator
     private let contextBuilder: AIContextBuilder
@@ -137,6 +138,7 @@ final class AICoachSession {
         let generation = UUID()
         requestGeneration = generation
         isSending = true
+        canRetry = false
         availability = .loading
         defer {
             if requestGeneration == generation {
@@ -157,11 +159,13 @@ final class AICoachSession {
             guard !response.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   response.count <= 4_000,
                   !response.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) && $0.value != 10 && $0.value != 9 }) else {
+                canRetry = true
                 availability = .failed("Gemini вернул пустой или слишком большой ответ. Попробуй задать вопрос иначе.")
                 return true
             }
             messages.append(AIChatMessage(role: .assistant, text: response.trimmingCharacters(in: .whitespacesAndNewlines)))
             trimHistory()
+            canRetry = false
             availability = .idle
             return true
         } catch let error as GeminiClientError {
@@ -170,13 +174,36 @@ final class AICoachSession {
                 availability = .idle
                 return true
             }
+            canRetry = true
             availability = .failed(error.userMessage)
             return true
         } catch {
             guard requestGeneration == generation else { return true }
+            canRetry = !Task.isCancelled
             availability = Task.isCancelled ? .idle : .failed("Не удалось получить ответ. Предыдущие сообщения останутся только в текущем чате.")
             return true
         }
+    }
+
+    @discardableResult
+    func retryLast(
+        store: Store,
+        apiKey: String?,
+        isAIEnabled: Bool,
+        allowsPersonalData: Bool = false
+    ) async -> Bool {
+        guard canRetry, !isSending,
+              let question = messages.last(where: { $0.role == .user })?.text else { return false }
+        if messages.last?.role == .user { messages.removeLast() }
+        canRetry = false
+        availability = .idle
+        return await send(
+            question,
+            store: store,
+            apiKey: apiKey,
+            isAIEnabled: isAIEnabled,
+            allowsPersonalData: allowsPersonalData
+        )
     }
 
     func setLocalError(_ message: String) {
@@ -191,6 +218,7 @@ final class AICoachSession {
         activeScope = nil
         startingInsights = nil
         isSending = false
+        canRetry = false
         availability = .idle
     }
 

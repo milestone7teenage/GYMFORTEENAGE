@@ -8,6 +8,7 @@ private actor RequestCoordinatorStub: GeminiGenerating {
     private(set) var maximumActiveCount = 0
     private(set) var lastRequest: GeminiGenerateContentRequest?
     var response = "Держи спокойный темп и ориентируйся на комфорт."
+    var shouldFail = false
 
     func generateContent(_ request: GeminiGenerateContentRequest, apiKey: String) async throws -> String {
         requestCount += 1
@@ -15,6 +16,10 @@ private actor RequestCoordinatorStub: GeminiGenerating {
         maximumActiveCount = max(maximumActiveCount, activeCount)
         lastRequest = request
         defer { activeCount -= 1 }
+        if shouldFail {
+            shouldFail = false
+            throw GeminiClientError.transport
+        }
         if request.contents.first?.parts.first?.text == "background" {
             try await Task.sleep(for: .seconds(30))
             return "background result"
@@ -24,6 +29,7 @@ private actor RequestCoordinatorStub: GeminiGenerating {
 
     func counts() -> (requests: Int, maximumConcurrent: Int) { (requestCount, maximumActiveCount) }
     func capturedRequest() -> GeminiGenerateContentRequest? { lastRequest }
+    func failNextRequest() { shouldFail = true }
 }
 
 @MainActor
@@ -125,6 +131,29 @@ final class AIRequestCoordinatorTests: XCTestCase {
 
         session.cancelAndClear()
         XCTAssertTrue(session.messages.isEmpty)
+    }
+
+    func testFailedChatCanBeRetriedWithoutDuplicatingTheUserMessage() async throws {
+        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+        let store = Store(fileURL: fileURL)
+        store.records = [record(date: Date())]
+        let client = RequestCoordinatorStub()
+        await client.failNextRequest()
+        let session = AICoachSession(requestCoordinator: AIRequestCoordinator(client: client))
+        let question = "Как менялась бабочка за неделю?"
+
+        _ = await session.send(question, store: store, apiKey: "test-key", isAIEnabled: true, allowsPersonalData: true)
+        XCTAssertTrue(session.canRetry)
+        XCTAssertEqual(session.messages.filter { $0.role == .user }.count, 1)
+
+        _ = await session.retryLast(store: store, apiKey: "test-key", isAIEnabled: true, allowsPersonalData: true)
+
+        XCTAssertFalse(session.canRetry)
+        XCTAssertEqual(session.messages.filter { $0.role == .user }.count, 1)
+        XCTAssertEqual(session.messages.last?.role, .assistant)
+        let counts = await client.counts()
+        XCTAssertEqual(counts.requests, 2)
     }
 
     private func request(_ text: String) -> GeminiGenerateContentRequest {
