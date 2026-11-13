@@ -78,7 +78,7 @@ final class AIInsightsCoordinatorTests: XCTestCase {
 
         await coordinator.refresh(store: store, isAIEnabled: false, apiKey: "test-key", allowsPersonalData: true)
         XCTAssertEqual(coordinator.state.availability, .disabled)
-        await coordinator.refresh(store: store, isAIEnabled: true, apiKey: "test-key", allowsPersonalData: false)
+        await coordinator.refresh(store: store, isAIEnabled: true, apiKey: "test-key", allowsPersonalData: true, allowGeneration: false)
         XCTAssertEqual(coordinator.state.availability, .consentRequired)
         let disabledRequestCount = await client.count()
         XCTAssertEqual(disabledRequestCount, 0)

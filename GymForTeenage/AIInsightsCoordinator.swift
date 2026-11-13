@@ -223,6 +223,7 @@ final class AIInsightsCoordinator {
         isAIEnabled: Bool,
         apiKey: String?,
         allowsPersonalData: Bool = false,
+        allowGeneration: Bool = true,
         forceRefresh: Bool = false,
         now: Date = Date()
     ) async {
@@ -244,6 +245,16 @@ final class AIInsightsCoordinator {
         }
         if isCurrent, let previousInsights {
             state = AIInsightsViewState(availability: .ready, insights: previousInsights, isStale: false, message: nil)
+            return
+        }
+        if !allowGeneration {
+            let hasKey = apiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            state = AIInsightsViewState(
+                availability: hasKey ? .consentRequired : .missingKey,
+                insights: previousInsights,
+                isStale: previousInsights != nil,
+                message: hasKey ? "Для обновления нужно отдельно подтвердить передачу показателей в Google Gemini." : "Сохрани API-ключ Gemini в настройках, чтобы запросить Insights."
+            )
             return
         }
         if !forceRefresh, lastAttemptFingerprint == analysis.fingerprint {

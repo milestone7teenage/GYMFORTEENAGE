@@ -6,6 +6,7 @@ import UIKit
 struct PremiumRootView: View {
     @Environment(Store.self) private var store
     @State private var selection = 0
+    @State private var aiInsightsCoordinator = AIInsightsCoordinator()
     var body: some View {
         ZStack(alignment: .bottom) {
             TeenTheme.ink.ignoresSafeArea()
@@ -21,6 +22,7 @@ struct PremiumRootView: View {
             .transition(.opacity)
             PremiumTabBar(selection: $selection).padding(.horizontal, 20).padding(.bottom, 8)
         }
+        .environment(aiInsightsCoordinator)
         .tint(TeenTheme.lime)
         .preferredColorScheme(.dark)
         .alert("Сообщение", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
@@ -66,6 +68,7 @@ struct PremiumHomeView: View {
                 VStack(spacing: 18) {
                     header
                     HStack(spacing: 12) { measureCard("Вес", unit: "кг", kind: "weight", icon: "scalemass.fill", tint: TeenTheme.violet); measureCard("Рост", unit: "см", kind: "height", icon: "ruler.fill", tint: TeenTheme.ice) }
+                    AIInsightsSection()
                     TeenSectionTitle("тренировки", detail: store.session == nil ? "3 программы" : "есть активная")
                     workoutCarousel
                     TeenSectionTitle("вода сегодня", detail: "цель 3 000 мл")
@@ -473,6 +476,7 @@ struct PremiumStatisticsView: View {
     var body: some View {
         NavigationStack { ScrollView(showsIndicators: false) { VStack(spacing: 16) {
             header
+            AIInsightsSection()
             exerciseSelector
             if let ex = selectedExercise {
                 metricPicker
