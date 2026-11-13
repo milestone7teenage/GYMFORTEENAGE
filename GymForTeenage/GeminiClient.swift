@@ -1,7 +1,12 @@
 import CryptoKit
 import Foundation
 
-actor GeminiClient {
+protocol GeminiGenerating: Sendable {
+    func generateContent(_ request: GeminiGenerateContentRequest, apiKey: String) async throws -> String
+}
+
+actor GeminiClient: GeminiGenerating {
+    static let shared = GeminiClient()
     private struct Flight {
         let token: UUID
         let task: Task<String, Error>

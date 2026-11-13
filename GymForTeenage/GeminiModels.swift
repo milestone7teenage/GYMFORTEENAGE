@@ -1,10 +1,10 @@
 import Foundation
 
-struct GeminiPart: Codable, Equatable {
+struct GeminiPart: Codable, Equatable, Sendable {
     let text: String
 }
 
-struct GeminiContent: Codable, Equatable {
+struct GeminiContent: Codable, Equatable, Sendable {
     let role: String?
     let parts: [GeminiPart]
 
@@ -19,13 +19,13 @@ struct GeminiContent: Codable, Equatable {
     }
 }
 
-struct GeminiGenerationConfig: Codable, Equatable {
+struct GeminiGenerationConfig: Codable, Equatable, Sendable {
     var temperature: Double? = 0.2
     var maxOutputTokens: Int? = 2048
     var responseMimeType: String?
 }
 
-struct GeminiGenerateContentRequest: Codable, Equatable {
+struct GeminiGenerateContentRequest: Codable, Equatable, Sendable {
     var systemInstruction: GeminiContent?
     var contents: [GeminiContent]
     var generationConfig: GeminiGenerationConfig?
@@ -41,8 +41,8 @@ struct GeminiGenerateContentRequest: Codable, Equatable {
     }
 }
 
-struct GeminiGenerateContentResponse: Decodable, Equatable {
-    struct Candidate: Decodable, Equatable {
+struct GeminiGenerateContentResponse: Decodable, Equatable, Sendable {
+    struct Candidate: Decodable, Equatable, Sendable {
         let content: GeminiContent?
         let finishReason: String?
     }
