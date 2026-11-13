@@ -209,11 +209,11 @@ final class AIInsightsCoordinator {
     private var activeTask: Task<String, Error>?
 
     init(
-        engine: AIInsightsEngine = AIInsightsEngine(),
+        engine: AIInsightsEngine? = nil,
         cache: AIInsightsCache = AIInsightsCache(),
         client: any GeminiGenerating = GeminiClient.shared
     ) {
-        self.engine = engine
+        self.engine = engine ?? AIInsightsEngine()
         self.cache = cache
         self.client = client
     }
