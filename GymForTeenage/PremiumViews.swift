@@ -583,7 +583,23 @@ struct PremiumStatisticsView: View {
 }
 
 struct PremiumSettingsView: View {
+    private enum AIKeyAvailability: Equatable {
+        case missing
+        case present
+        case unknown
+    }
+    private enum AIKeyMutation: Equatable {
+        case overwrite
+        case delete
+    }
     @Environment(Store.self) private var store
+    @AppStorage("aiCoachEnabled") private var aiCoachEnabled = false
+    @State private var aiKeyStore: any AIKeyStore = AIKeychainStore()
+    @State private var aiKeyInput = ""
+    @State private var aiKeyAvailability: AIKeyAvailability = .unknown
+    @State private var aiKeyStatus = "Проверка локального состояния не выполнена"
+    @State private var aiKeyStatusIsError = false
+    @State private var pendingAIKeyMutation: AIKeyMutation?
     @State private var importing = false
     @State private var shareURL: URL?
     @State private var confirmClear = false
@@ -591,6 +607,8 @@ struct PremiumSettingsView: View {
     var body: some View {
         NavigationStack { ScrollView(showsIndicators: false) { VStack(spacing: 16) {
             HStack { VStack(alignment: .leading, spacing: 4) { Text("настройки").font(.system(.largeTitle, design: .rounded, weight: .bold)); Text("Данные остаются на устройстве").font(.subheadline).foregroundStyle(TeenTheme.muted) }; Spacer() }
+            TeenSectionTitle("AI-помощник")
+            aiSettingsCard
             TeenSectionTitle("данные")
             TeenCard(accent: TeenTheme.ice) { VStack(spacing: 2) { settingButton("Экспорт JSON", detail: "Создать полную резервную копию", icon: "square.and.arrow.up", tint: TeenTheme.ice) { shareURL = store.export(); if shareURL == nil { message = "Не удалось создать копию" } }; divider; settingButton("Импорт копии", detail: "Выбрать JSON-файл", icon: "square.and.arrow.down", tint: TeenTheme.violet) { importing = true }; divider; settingButton("Вставить копию из буфера", detail: "Импортировать скопированный JSON", icon: "doc.on.clipboard", tint: TeenTheme.lime) { importClipboard() }; divider; settingButton("Очистить все данные", detail: "История, вода и незавершённая тренировка", icon: "trash", tint: .red) { confirmClear = true } } }
             TeenSectionTitle("напоминания")
@@ -608,6 +626,7 @@ struct PremiumSettingsView: View {
             TeenSectionTitle("информация")
             TeenCard { VStack(alignment: .leading, spacing: 10) { Label("Только локальное хранение", systemImage: "lock.fill").font(.headline); Text("Тренировки, измерения и резервные копии не отправляются на сервер. JSON-копия нужна, чтобы перенести или восстановить свои данные.").font(.caption).foregroundStyle(TeenTheme.muted); Link(destination: URL(string: "https://t.me/sellyou4ss")!) { Label("Telegram разработчика", systemImage: "paperplane.fill").font(.subheadline.weight(.semibold)).foregroundStyle(TeenTheme.ice) } } }
         }.frame(maxWidth: .infinity).padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 112) }.toolbar(.hidden, for: .navigationBar)
+            .task { refreshAIKeyStatus() }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
                 do { let url = try result.get(); let accessed = url.startAccessingSecurityScopedResource(); defer { if accessed { url.stopAccessingSecurityScopedResource() } }; try store.restore(Data(contentsOf: url)); message = "Копия импортирована"; Task { await store.scheduleAll() } } catch { message = "Не удалось импортировать: \(error.localizedDescription)" }
             }
@@ -615,6 +634,100 @@ struct PremiumSettingsView: View {
             .sheet(item: Binding(get: { shareURL.map { ShareItem(url: $0) } }, set: { shareURL = $0?.url })) { ActivityView(url: $0.url) }
             .alert("Информация", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) { Button("ОК") { message = nil } } message: { Text(message ?? "") }
         }
+    }
+    private var aiSettingsCard: some View {
+        TeenCard(accent: TeenTheme.violet) {
+            VStack(alignment: .leading, spacing: 14) {
+                Toggle("Включить AI-помощника", isOn: $aiCoachEnabled).tint(TeenTheme.violet)
+                Text("На этом этапе включение сохраняет только настройку. Сетевые запросы Gemini ещё не выполняются.")
+                    .font(.caption).foregroundStyle(TeenTheme.muted)
+                SecureField(aiKeyAvailability == .present ? "Новый ключ для замены" : "API-ключ Gemini", text: $aiKeyInput)
+                    .textContentType(.password)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .padding(12)
+                    .background(TeenTheme.raised, in: RoundedRectangle(cornerRadius: 12))
+                if aiKeyAvailability == .unknown {
+                    Text("Неизвестно, сохранён ли ключ. Повторите проверку или подтвердите действие с предупреждением.")
+                        .font(.caption).foregroundStyle(TeenTheme.muted)
+                    HStack {
+                        Button("Перезаписать…") { pendingAIKeyMutation = .overwrite }
+                            .buttonStyle(.borderedProminent).tint(TeenTheme.violet)
+                            .disabled(aiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        Button("Удалить ключ…", role: .destructive) { pendingAIKeyMutation = .delete }
+                    }
+                } else {
+                    HStack {
+                        Button(aiKeyAvailability == .present ? "Заменить ключ" : "Сохранить ключ") { saveAIKey() }
+                            .buttonStyle(.borderedProminent).tint(TeenTheme.violet)
+                            .disabled(aiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        if aiKeyAvailability == .present {
+                            Button("Удалить", role: .destructive) { pendingAIKeyMutation = .delete }
+                        }
+                    }
+                }
+                HStack(spacing: 8) {
+                    Image(systemName: aiKeyStatusIsError ? "exclamationmark.circle.fill" : (aiKeyAvailability == .present ? "checkmark.circle.fill" : (aiKeyAvailability == .missing ? "key.slash" : "questionmark.circle.fill")))
+                        .foregroundStyle(aiKeyStatusIsError ? .red : (aiKeyAvailability == .present ? TeenTheme.lime : TeenTheme.muted))
+                    Text(aiKeyStatus).font(.caption).foregroundStyle(aiKeyStatusIsError ? .red : TeenTheme.muted)
+                    Spacer()
+                    Button(aiKeyAvailability == .unknown ? "Повторить проверку" : "Проверить локально") { refreshAIKeyStatus() }.font(.caption.weight(.semibold))
+                }
+            }
+        }
+        .confirmationDialog(
+            pendingAIKeyMutation == .overwrite ? "Перезаписать API-ключ?" : "Удалить API-ключ?",
+            isPresented: Binding(get: { pendingAIKeyMutation != nil }, set: { if !$0 { pendingAIKeyMutation = nil } }),
+            titleVisibility: .visible
+        ) {
+            if pendingAIKeyMutation == .overwrite {
+                Button("Перезаписать ключ", role: .destructive) { saveAIKey() }
+                    .disabled(aiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            } else if pendingAIKeyMutation == .delete {
+                Button("Удалить ключ", role: .destructive) { deleteAIKey() }
+            }
+            Button("Отмена", role: .cancel) { pendingAIKeyMutation = nil }
+        } message: {
+            Text("Состояние Keychain неизвестно из-за ошибки. Перезапись заменит возможный сохранённый ключ; удаление безвозвратно удалит его, если он существует.")
+        }
+    }
+    private func refreshAIKeyStatus() {
+        do {
+            aiKeyAvailability = try aiKeyStore.containsKey() ? .present : .missing
+            aiKeyStatus = aiKeyAvailability == .present ? "API-ключ сохранён в Keychain" : "API-ключ отсутствует"
+            aiKeyStatusIsError = false
+        } catch {
+            aiKeyAvailability = .unknown
+            aiKeyStatus = errorMessage(for: error)
+            aiKeyStatusIsError = true
+        }
+    }
+    private func saveAIKey() {
+        do {
+            try aiKeyStore.save(key: aiKeyInput)
+            aiKeyInput = ""
+            pendingAIKeyMutation = nil
+            refreshAIKeyStatus()
+        } catch {
+            aiKeyAvailability = .unknown
+            aiKeyStatus = errorMessage(for: error)
+            aiKeyStatusIsError = true
+        }
+    }
+    private func deleteAIKey() {
+        do {
+            try aiKeyStore.deleteKey()
+            aiKeyInput = ""
+            pendingAIKeyMutation = nil
+            refreshAIKeyStatus()
+        } catch {
+            aiKeyAvailability = .unknown
+            aiKeyStatus = errorMessage(for: error)
+            aiKeyStatusIsError = true
+        }
+    }
+    private func errorMessage(for error: Error) -> String {
+        (error as? AIKeychainError)?.userMessage ?? "Не удалось проверить защищённое хранилище."
     }
     private var divider: some View { Rectangle().fill(TeenTheme.line).frame(height: 1).padding(.leading, 52) }
     private func importClipboard() {
