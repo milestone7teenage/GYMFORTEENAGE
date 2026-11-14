@@ -118,7 +118,8 @@ struct AIContextBuilder {
             return selection(scope: scope, payload: payload, category: .exerciseHistory, clarification: nil)
         }
 
-        if normalizedQuestion.contains("вода") || normalizedQuestion.contains("пить") || normalizedQuestion.contains("пил") || normalizedQuestion.contains("гидратац") {
+        // Check water/measurement questions BEFORE general workout question
+        if normalizedQuestion.contains("вода") || normalizedQuestion.contains("пить") || normalizedQuestion.contains("пил") || normalizedQuestion.contains("гидратац") || normalizedQuestion.contains("мл") || normalizedQuestion.contains("литр") {
             let scope = AIContextScope(category: .waterIntake, exerciseID: nil, measurementKind: nil, startDate: period.start, endDate: period.end)
             let entries = store.water
                 .filter { dayDate($0.day).map { $0 >= period.start && $0 < period.end } ?? false }
@@ -128,14 +129,7 @@ struct AIContextBuilder {
             return selection(scope: scope, payload: AIWaterContext(period: period.label, entries: entries), category: .waterIntake, clarification: nil)
         }
 
-        if isGeneralWorkoutQuestion(normalizedQuestion) {
-            let scope = AIContextScope(category: .exerciseHistory, exerciseID: nil, measurementKind: nil, startDate: period.start, endDate: period.end)
-            let entries = buildGeneralWorkoutHistory(store: store, period: period)
-            let payload = AIGeneralWorkoutContext(period: period.label, entries: entries)
-            return selection(scope: scope, payload: payload, category: .exerciseHistory, clarification: nil)
-        }
-
-        if normalizedQuestion.contains("вес") || normalizedQuestion.contains("рост") || normalizedQuestion.contains("измерен") {
+        if normalizedQuestion.contains("рост") || normalizedQuestion.contains("масса тела") || normalizedQuestion.contains("вес тела") || normalizedQuestion.contains("похудел") || normalizedQuestion.contains("набрал вес") {
             let kind = normalizedQuestion.contains("рост") ? "height" : "weight"
             let scope = AIContextScope(category: .bodyMeasurements, exerciseID: nil, measurementKind: kind, startDate: period.start, endDate: period.end)
             let entries = store.measures
@@ -146,8 +140,29 @@ struct AIContextBuilder {
             return selection(scope: scope, payload: AIMeasurementContext(period: period.label, kind: kind, entries: entries), category: .bodyMeasurements, clarification: nil)
         }
 
+        // Follow-up questions with active scope should be checked BEFORE general workout
         if isFollowUp(normalizedQuestion), let activeScope {
             return build(scope: activeScope, question: normalizedQuestion, store: store, now: now)
+        }
+
+        // General workout question - only when no specific exercise matched and no water/measurement question
+        if isGeneralWorkoutQuestion(normalizedQuestion) {
+            let scope = AIContextScope(category: .exerciseHistory, exerciseID: nil, measurementKind: nil, startDate: period.start, endDate: period.end)
+            let entries = buildGeneralWorkoutHistory(store: store, period: period)
+            let payload = AIGeneralWorkoutContext(period: period.label, entries: entries)
+            return selection(scope: scope, payload: payload, category: .exerciseHistory, clarification: nil)
+        }
+
+        // Body measurements - generic "вес" / "измерен" after workout-specific checks
+        if normalizedQuestion.contains("вес") || normalizedQuestion.contains("измерен") {
+            let kind = normalizedQuestion.contains("рост") ? "height" : "weight"
+            let scope = AIContextScope(category: .bodyMeasurements, exerciseID: nil, measurementKind: kind, startDate: period.start, endDate: period.end)
+            let entries = store.measures
+                .filter { $0.kind == kind && $0.date >= period.start && $0.date < period.end }
+                .sorted { $0.date < $1.date }
+                .suffix(50)
+                .map { AIMeasurementContext.Entry(date: dayString($0.date), value: $0.value, unit: kind == "weight" ? "kg" : "cm") }
+            return selection(scope: scope, payload: AIMeasurementContext(period: period.label, kind: kind, entries: entries), category: .bodyMeasurements, clarification: nil)
         }
 
         if normalizedQuestion.contains("недел") || normalizedQuestion.contains("сводк") || normalizedQuestion.contains("обзор") || normalizedQuestion.contains("мой прогресс") || normalizedQuestion.contains("мои трениров") {
@@ -259,8 +274,11 @@ struct AIContextBuilder {
     }
 
     private func isGeneralWorkoutQuestion(_ question: String) -> Bool {
-        let keywords = ["трен", "рабоч", "вес", "прогресс", "нагруз", "план", "программ"]
-        return keywords.contains { question.contains($0) }
+        let workoutKeywords = ["трен", "упражнен", "подход", "рабочий вес", "программ", "план тренировок"]
+        let excludeKeywords = ["вод", "пил", "выпил", "мл", "литр", "гидратац", "рост", "масса тела", "вес тела", "похудел", "набрал вес", "измерен"]
+        let hasWorkoutKeyword = workoutKeywords.contains { question.contains($0) }
+        let hasExcludeKeyword = excludeKeywords.contains { question.contains($0) }
+        return hasWorkoutKeyword && !hasExcludeKeyword
     }
 
     private func build(scope: AIContextScope, question: String, store: Store, now: Date) -> AIContextSelection {
@@ -304,17 +322,22 @@ struct AIContextBuilder {
         }
         if !exactMatches.isEmpty { return exactMatches }
 
+        // Step 2: Check if any word from query is contained in exercise title (localized case-insensitive)
+        let queryWords = questionLower.split(separator: " ").map(String.init)
         let containsMatches = Catalog.all.filter { exercise in
-            let title = exercise.title
-            return questionLower.contains(title.lowercased())
+            let titleLower = exercise.title.lowercased()
+            return queryWords.contains { qWord in
+                qWord.count >= 3 && titleLower.contains(qWord)
+            }
         }
         if !containsMatches.isEmpty { return containsMatches }
 
+        // Step 3: Stem-based matching with relaxed threshold
+        let ignoredWords: Set<String> = ["в", "на", "под", "за", "по", "моей", "моем", "моём", "мой", "моя", "мои", "упражнение", "как", "менялась", "менялся", "история", "прогресс", "рабочий", "вес", "подход", "за", "неделю", "месяц", "дня", "дней", "делать", "делаю", "сколько", "на", "как", "менялась", "менялся", "родился", "родилась", "родилось"]
         let questionWords = question.split(separator: " ").map(String.init)
-        let ignoredWords: Set<String> = ["в", "на", "под", "за", "по", "моей", "моем", "моём", "мой", "моя", "мои", "упражнение", "как", "менялась", "менялся", "история", "прогресс", "рабочий", "вес", "подход", "за", "неделю", "месяц", "дня", "дней", "делать", "делаю", "сколько", "на", "как", "менялась", "менялся"]
         let usefulWords = questionWords
             .map { stemRussian($0) }
-            .filter { !ignoredWords.contains($0) && $0.count >= 3 }
+            .filter { !ignoredWords.contains($0) && $0.count >= 2 }
         guard !usefulWords.isEmpty else { return [] }
 
         return Catalog.all.filter { exercise in
@@ -322,10 +345,30 @@ struct AIContextBuilder {
             let titleWords = title.split(separator: " ").map { stemRussian(String($0)) }
             return usefulWords.contains { qStem in
                 titleWords.contains { tStem in
-                    tStem.hasPrefix(qStem) || qStem.hasPrefix(tStem) || tStem == qStem
+                    tStem.hasPrefix(qStem) || qStem.hasPrefix(tStem) || tStem == qStem ||
+                    (tStem.count <= 4 && qStem.count <= 4 && levenshteinDistance(tStem, qStem) <= 1)
                 }
             }
         }
+    }
+
+    private func levenshteinDistance(_ a: String, _ b: String) -> Int {
+        let aChars = Array(a)
+        let bChars = Array(b)
+        var dp = [[Int]](repeating: [Int](repeating: 0, count: bChars.count + 1), count: aChars.count + 1)
+        for i in 0...aChars.count { dp[i][0] = i }
+        for j in 0...bChars.count { dp[0][j] = j }
+        for i in 1...aChars.count {
+            for j in 1...bChars.count {
+                let cost = aChars[i-1] == bChars[j-1] ? 0 : 1
+                dp[i][j] = min(
+                    dp[i-1][j] + 1,      // deletion
+                    dp[i][j-1] + 1,      // insertion
+                    dp[i-1][j-1] + cost  // substitution
+                )
+            }
+        }
+        return dp[aChars.count][bChars.count]
     }
 
     private func stemRussian(_ word: String) -> String {
