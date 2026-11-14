@@ -224,7 +224,7 @@ struct PremiumWorkoutView: View {
         let session = store.current(workout)
         ScrollView { VStack(spacing: 14) {
             TeenCard(accent: TeenTheme.lime) { HStack { VStack(alignment: .leading, spacing: 5) { Text(workout.title).font(.title2.bold()); Text("\(session.exercises.filter { $0.status == "completed" }.count) из \(session.exercises.count) упражнений").foregroundStyle(TeenTheme.muted).font(.caption) }; Spacer(); ZStack { Circle().stroke(TeenTheme.raised, lineWidth: 6); Circle().trim(from: 0, to: Double(session.exercises.filter { $0.status == "completed" || $0.status == "skipped" }.count) / Double(session.exercises.count)).stroke(TeenTheme.lime, style: StrokeStyle(lineWidth: 6, lineCap: .round)).rotationEffect(.degrees(-90)); Text("\(session.current + 1)").font(.headline) }.frame(width: 50, height: 50) } }
-            if let skipped = session.exercises.enumerated().filter({ $0.element.status == "skipped" }).first {
+            if session.exercises.contains(where: { $0.status == "skipped" }) {
                 Button { showRecovery = true } label: {
                     HStack {
                         Image(systemName: "arrow.counterclockwise")
