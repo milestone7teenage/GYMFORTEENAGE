@@ -82,7 +82,7 @@ final class GeminiClientTests: XCTestCase {
             store: store,
             apiKey: markerKey,
             isAIEnabled: true,
-            consentedCategories: [.chatMessages, .exerciseHistory]
+            consentedCategories: [.chatMessages, .exerciseHistory, .weeklyInsights]
         )
 
         XCTAssertTrue(sent)
