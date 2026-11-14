@@ -148,21 +148,59 @@ final class GeminiClientTests: XCTestCase {
     }
 
     func testBadRequestAndForbiddenResponsesAreTypedWithoutBodyLeak() async {
-        for (status, expected) in [(400, GeminiClientError.rejected(status: 400)), (403, .forbidden)] {
+        let apiErrorBody = try! JSONSerialization.data(withJSONObject: [
+            "error": ["code": 400, "message": "API key not valid. Please pass a valid API key."]
+        ])
+        for (status, data, expectedStatus) in [
+            (400, apiErrorBody, 400),
+            (403, Data("private server details".utf8), 403)
+        ] {
             let host = UUID().uuidString + ".test"
-            GeminiURLProtocolStub.configure(host: host, replies: [.init(status: status, data: Data("private server details".utf8))])
+            GeminiURLProtocolStub.configure(host: host, replies: [.init(status: status, data: data)])
             let (client, session, _) = Self.makeClient(host: host, maximumRetries: 2)
             defer { GeminiURLProtocolStub.remove(host: host); session.invalidateAndCancel() }
             do {
                 _ = try await client.generateContent(Self.request, apiKey: "test-api-key")
                 XCTFail("Expected HTTP \(status) to fail")
             } catch let error as GeminiClientError {
-                XCTAssertEqual(error, expected)
-                XCTAssertFalse(error.userMessage.contains("private server details"))
+                if status == 403 {
+                    XCTAssertEqual(error, .forbidden)
+                } else {
+                    guard case .rejected(let s, _) = error else { XCTFail("Unexpected error: \(error)"); continue }
+                    XCTAssertEqual(s, expectedStatus)
+                }
+                XCTAssertFalse(error.userMessage.contains("test-api-key"))
                 XCTAssertEqual(GeminiURLProtocolStub.requestCount(for: host), 1)
             } catch {
                 XCTFail("Unexpected error type: \(error)")
             }
+        }
+    }
+
+    func testRejectedErrorExposesServerMessageWithoutLeakingKey() async {
+        let body = try! JSONSerialization.data(withJSONObject: [
+            "error": ["code": 400, "message": "Model gemini-3.1-flash-lite not found"]
+        ])
+        let host = UUID().uuidString + ".test"
+        GeminiURLProtocolStub.configure(host: host, replies: [.init(status: 400, data: body)])
+        defer { GeminiURLProtocolStub.remove(host: host) }
+        let (client, session, _) = Self.makeClient(host: host)
+        defer { session.invalidateAndCancel() }
+
+        do {
+            _ = try await client.generateContent(Self.request, apiKey: "marker-secret-key")
+            XCTFail("Expected rejected error")
+        } catch let error as GeminiClientError {
+            guard case let .rejected(status, message) = error else {
+                XCTFail("Expected rejected error, got: \(error)"); return
+            }
+            XCTAssertEqual(status, 400)
+            XCTAssertNotNil(message)
+            XCTAssertTrue(message?.contains("not found") ?? false)
+            XCTAssertTrue(error.userMessage.contains("not found"))
+            XCTAssertFalse(error.userMessage.contains("marker-secret-key"))
+        } catch {
+            XCTFail("Unexpected error type: \(error)")
         }
     }
 

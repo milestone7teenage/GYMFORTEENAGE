@@ -244,6 +244,10 @@ actor GeminiClient: GeminiGenerating {
                 throw GeminiClientError.invalidResponse
             }
             httpResponse = receivedHTTPResponse
+            for try await byte in bytes {
+                guard data.count < responseLimit else { throw GeminiClientError.responseTooLarge }
+                data.append(byte)
+            }
             if httpResponse.statusCode == 401 { throw GeminiClientError.unauthorized }
             if httpResponse.statusCode == 403 { throw GeminiClientError.forbidden }
             if httpResponse.statusCode == 429 {
@@ -252,16 +256,12 @@ actor GeminiClient: GeminiGenerating {
             }
             guard (200..<300).contains(httpResponse.statusCode) else {
                 if (500..<600).contains(httpResponse.statusCode) {
-                    logHTTPFailure(status: httpResponse.statusCode, body: data, endpoint: endpoint)
+                    logHTTPFailure(status: httpResponse.statusCode, endpoint: endpoint)
                     throw GeminiClientError.server(status: httpResponse.statusCode)
                 }
-                let serverMessage = safeServerMessage(from: data)
-                logHTTPFailure(status: httpResponse.statusCode, body: data, endpoint: endpoint)
+                let serverMessage = safeServerMessage(from: data, redacting: apiKey)
+                logHTTPFailure(status: httpResponse.statusCode, endpoint: endpoint, message: serverMessage)
                 throw GeminiClientError.rejected(status: httpResponse.statusCode, message: serverMessage)
-            }
-            for try await byte in bytes {
-                guard data.count < responseLimit else { throw GeminiClientError.responseTooLarge }
-                data.append(byte)
             }
         } catch let error as URLError {
             if Task.isCancelled || error.code == .cancelled { throw GeminiClientError.cancelled }
@@ -293,21 +293,27 @@ actor GeminiClient: GeminiGenerating {
         }
     }
 
-    private static func safeServerMessage(from data: Data) -> String? {
+    private static func safeServerMessage(from data: Data, redacting secret: String) -> String? {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let error = object["error"] as? [String: Any],
               let message = error["message"] as? String else {
             return nil
         }
-        return message
+        var safe = message
+        if secret.trimmingCharacters(in: .whitespacesAndNewlines).count >= 8 {
+            safe = safe.replacingOccurrences(of: secret.trimmingCharacters(in: .whitespacesAndNewlines), with: "[REDACTED]")
+        }
+        let trimmed = safe.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return String(trimmed.prefix(500))
     }
 
-    private static func logHTTPFailure(status: Int, body: Data, endpoint: URL) {
-        let truncated = String(decoding: body.prefix(512), as: UTF8.self)
+    private static func logHTTPFailure(status: Int, endpoint: URL, message: String?) {
         let endpointSafe = endpoint.host ?? endpoint.absoluteString
-        os_log("Gemini request failed: status=%{public}d endpoint=%{public}s body=%{public}s",
+        let safeMessage = message.map { $0.replacingOccurrences(of: "\r", with: " ").replacingOccurrences(of: "\n", with: " ") } ?? ""
+        os_log("Gemini request failed: status=%{public}d endpoint=%{public}s detail=%{public}s",
                log: OSLog(subsystem: "com.gymforteenage.ai", category: "GeminiClient"),
-               type: .error, status, endpointSafe, truncated)
+               type: .error, status, endpointSafe, safeMessage)
     }
 
     private static func retryAfter(from response: HTTPURLResponse, fallback: TimeInterval) -> TimeInterval {
