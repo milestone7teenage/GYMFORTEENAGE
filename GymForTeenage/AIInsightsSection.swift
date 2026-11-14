@@ -4,9 +4,11 @@ import UIKit
 struct AIInsightsSection: View {
     @Environment(Store.self) private var store
     @Environment(AIInsightsCoordinator.self) private var coordinator
+    @Environment(AIConsentStore.self) private var consentStore
     @AppStorage("aiCoachEnabled") private var isAIEnabled = false
     @State private var keychainError: String?
     @State private var presentsChat = false
+    @State private var presentsConsent = false
 
     var body: some View {
         TeenCard(accent: TeenTheme.violet) {
@@ -78,7 +80,11 @@ struct AIInsightsSection: View {
 
                 if showsAction {
                     Button(actionTitle) {
-                        Task { await refresh(force: true, allowGeneration: true) }
+                        if coordinator.state.availability == .consentRequired {
+                            presentsConsent = true
+                        } else {
+                            Task { await refresh(force: true, allowGeneration: true) }
+                        }
                     }
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(TeenTheme.ink)
@@ -93,6 +99,10 @@ struct AIInsightsSection: View {
         .onChange(of: isAIEnabled) { _, _ in
             Task { await refresh(force: false, allowGeneration: false) }
         }
+        .onChange(of: consentStore.consentedCategories) { oldCategories, newCategories in
+            coordinator.consentCategoriesChanged(from: oldCategories, to: newCategories)
+            Task { await refresh(force: false, allowGeneration: false) }
+        }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name.NSCalendarDayChanged)) { _ in
             Task { await refresh(force: false, allowGeneration: false) }
         }
@@ -100,10 +110,15 @@ struct AIInsightsSection: View {
             Task { await refresh(force: false, allowGeneration: false) }
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name.NSSystemTimeZoneDidChange)) { _ in
+            coordinator.updateCalendarContext()
             Task { await refresh(force: false, allowGeneration: false) }
         }
         .sheet(isPresented: $presentsChat) {
             AIChatView().environment(store).environment(coordinator).presentationDetents([.large])
+        }
+        .sheet(isPresented: $presentsConsent) {
+            AIConsentSheet(requiredCategories: coordinator.requiredConsentCategories, initialCategories: consentStore.consentedCategories)
+                .environment(consentStore)
         }
     }
 
@@ -115,7 +130,7 @@ struct AIInsightsSection: View {
             case .missingKey:
                 Text("Сначала добавь API-ключ Gemini в настройках.")
             case .consentRequired:
-                Text("Перед анализом потребуется отдельно подтвердить отправку показателей тренировок в Google Gemini.")
+                Text("Перед анализом можно выбрать, какие показатели разрешено отправлять Google Gemini.")
             case .loading:
                 Text("Готовим сводку из локально рассчитанных показателей…")
             case .ready:
@@ -132,14 +147,15 @@ struct AIInsightsSection: View {
     private var showsAction: Bool {
         if keychainError != nil { return true }
         switch coordinator.state.availability {
-        case .missingKey, .failed: return true
+        case .missingKey, .failed, .consentRequired: return true
         case .ready: return coordinator.state.isStale
-        case .disabled, .consentRequired, .loading, .noData: return false
+        case .disabled, .loading, .noData: return false
         }
     }
 
     private var actionTitle: String {
         if keychainError != nil || coordinator.state.availability == .missingKey { return "Повторить проверку ключа" }
+        if coordinator.state.availability == .consentRequired { return "Выбрать данные для передачи" }
         return coordinator.state.insights == nil ? "Повторить запрос" : "Обновить сводку"
     }
 
@@ -150,7 +166,7 @@ struct AIInsightsSection: View {
     @MainActor
     private func refresh(force: Bool, allowGeneration: Bool) async {
         guard isAIEnabled else {
-            await coordinator.refresh(store: store, isAIEnabled: false, apiKey: nil, allowsPersonalData: false, allowGeneration: false)
+            await coordinator.refresh(store: store, isAIEnabled: false, apiKey: nil, consentedCategories: consentStore.consentedCategories, allowGeneration: false)
             return
         }
         do {
@@ -160,7 +176,7 @@ struct AIInsightsSection: View {
                 store: store,
                 isAIEnabled: isAIEnabled,
                 apiKey: apiKey,
-                allowsPersonalData: false,
+                consentedCategories: consentStore.consentedCategories,
                 allowGeneration: allowGeneration,
                 forceRefresh: force
             )
@@ -174,6 +190,8 @@ struct AIInsightsSection: View {
         case "workouts_7d": return "Тренировки · 7 дн."
         case "completed_sets_7d": return "Подходы · 7 дн."
         case "tonnage_7d": return "Тоннаж · 7 дн."
+        case "latest_weight_kg": return "Последний вес"
+        case "latest_height_cm": return "Последний рост"
         default: return key
         }
     }

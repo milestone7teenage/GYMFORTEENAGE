@@ -9,6 +9,7 @@ struct AIInsightsAnalysis: Sendable {
     let limitations: [String]
     let comparisonWorkouts: [AIInsightsComparisonWorkout]
     let weeklyWorkoutCount: Int
+    let measurementCount: Int
     let promptJSON: String
 }
 
@@ -22,8 +23,16 @@ struct AIInsightsComparisonWorkout: Codable, Equatable, Sendable {
 private struct AIInsightsPromptContext: Encodable {
     let period: AIAnalysisPeriod
     let computedMetrics: [AIComputedMetric]
+    let measurements: [AIInsightsMeasurementValue]
     let comparisonWorkouts: [AIInsightsComparisonWorkout]
     let limitations: [String]
+}
+
+struct AIInsightsMeasurementValue: Codable, Equatable, Sendable {
+    let kind: String
+    let date: String
+    let value: Double
+    let unit: String
 }
 
 private struct AIInsightsFingerprint: Encodable {
@@ -50,6 +59,13 @@ private struct AIInsightsFingerprint: Encodable {
         let exercises: [ExerciseEntry]
     }
 
+    struct MeasurementEntry: Encodable {
+        let id: String
+        let kind: String
+        let timestampMilliseconds: Int64
+        let value: Double
+    }
+
     let algorithmVersion: Int
     let schemaVersion: Int
     let startMilliseconds: Int64
@@ -57,11 +73,12 @@ private struct AIInsightsFingerprint: Encodable {
     let localCalendarDate: String
     let timeZoneIdentifier: String
     let records: [RecordEntry]
+    let measurements: [MeasurementEntry]
 }
 
 @MainActor
 struct AIInsightsEngine {
-    static let contextAlgorithmVersion = 1
+    static let contextAlgorithmVersion = 2
 
     private let calendar: Calendar
     private let timeZone: TimeZone
@@ -98,14 +115,24 @@ struct AIInsightsEngine {
         )
         let completedSets = weekly.reduce(0) { $0 + Metrics.completedSets($1.exercises) }
         let tonnage = weekly.reduce(0.0) { $0 + Metrics.tonnage($1.exercises) }
-        let metrics = [
+        let measurements = latestMeasurements(in: store.measures, start: weekStart, end: endExclusive)
+        var metrics = [
             AIComputedMetric(key: "workouts_7d", value: Double(weekly.count), unit: "тренировки", sampleCount: weekly.count),
             AIComputedMetric(key: "completed_sets_7d", value: Double(completedSets), unit: "подходы", sampleCount: weekly.count),
             AIComputedMetric(key: "tonnage_7d", value: tonnage, unit: "кг·повторения", sampleCount: weekly.count)
         ]
+        for measurement in measurements {
+            metrics.append(AIComputedMetric(
+                key: measurement.kind == "weight" ? "latest_weight_kg" : "latest_height_cm",
+                value: measurement.value,
+                unit: measurement.kind == "weight" ? "kg" : "cm",
+                sampleCount: 1
+            ))
+        }
         var limitations = ["Итоги рассчитаны приложением только по завершённым тренировкам периода."]
         limitations.append("Сравнительные тренировки не входят в недельные итоги.")
         if weekly.isEmpty { limitations.append("За выбранные дни завершённых тренировок нет.") }
+        if measurements.isEmpty { limitations.append("За выбранные дни подходящих измерений нет.") }
         if completedSets == 0 && !weekly.isEmpty { limitations.append("Для подходов без числовых повторений нельзя рассчитать часть показателей.") }
 
         let comparisonRecords = store.records
@@ -124,7 +151,15 @@ struct AIInsightsEngine {
             endMilliseconds: milliseconds(endExclusive),
             localCalendarDate: dayString(today),
             timeZoneIdentifier: timeZone.identifier,
-            records: usedRecords.map(fingerprintRecord)
+            records: usedRecords.map(fingerprintRecord),
+            measurements: measurements.map { measurement in
+                return AIInsightsFingerprint.MeasurementEntry(
+                    id: measurement.id.uuidString,
+                    kind: measurement.kind,
+                    timestampMilliseconds: milliseconds(measurement.date),
+                    value: measurement.value
+                )
+            }
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -135,6 +170,14 @@ struct AIInsightsEngine {
         let promptContext = AIInsightsPromptContext(
             period: period,
             computedMetrics: metrics,
+            measurements: measurements.map { measurement in
+                AIInsightsMeasurementValue(
+                    kind: measurement.kind,
+                    date: dayString(measurement.date),
+                    value: measurement.value,
+                    unit: measurement.kind == "weight" ? "kg" : "cm"
+                )
+            },
             comparisonWorkouts: Array(comparisons),
             limitations: limitations
         )
@@ -146,8 +189,20 @@ struct AIInsightsEngine {
             limitations: limitations,
             comparisonWorkouts: Array(comparisons),
             weeklyWorkoutCount: weekly.count,
+            measurementCount: measurements.count,
             promptJSON: String(data: promptData, encoding: .utf8) ?? "{}"
         )
+    }
+
+    private func latestMeasurements(in values: [Measure], start: Date, end: Date) -> [Measure] {
+        let relevant = values.filter { ($0.kind == "weight" || $0.kind == "height") && $0.value.isFinite && $0.date >= start && $0.date < end }
+        let latest = Dictionary(grouping: relevant, by: \.kind).compactMap { _, entries in
+            entries.sorted { lhs, rhs in
+                if lhs.date != rhs.date { return lhs.date > rhs.date }
+                return lhs.id.uuidString < rhs.id.uuidString
+            }.first
+        }.sorted { $0.kind < $1.kind }
+        return latest
     }
 
     private func comparisonSummary(_ record: Record) -> AIInsightsComparisonWorkout {
@@ -200,13 +255,14 @@ struct AIInsightsEngine {
 @Observable
 final class AIInsightsCoordinator {
     private(set) var state = AIInsightsViewState.empty(.noData)
-    private let engine: AIInsightsEngine
+    private var engine: AIInsightsEngine
     private let cache: AIInsightsCache
     private let client: any GeminiGenerating
     private var lastAttemptFingerprint: String?
     private var activeRequestFingerprint: String?
     private var requestGeneration = UUID()
     private var activeTask: Task<String, Error>?
+    private(set) var requiredConsentCategories: Set<AIDataCategory> = [.weeklyInsights]
 
     init(
         engine: AIInsightsEngine? = nil,
@@ -222,25 +278,28 @@ final class AIInsightsCoordinator {
         store: Store,
         isAIEnabled: Bool,
         apiKey: String?,
-        allowsPersonalData: Bool = false,
+        consentedCategories: Set<AIDataCategory> = [],
         allowGeneration: Bool = true,
         forceRefresh: Bool = false,
         now: Date = Date()
     ) async {
         let analysis = engine.build(from: store, now: now)
+        requiredConsentCategories = analysis.measurementCount > 0 ? [.weeklyInsights, .bodyMeasurements] : [.weeklyInsights]
         let previous = cache.load()
         let previousInsights = previous?.insights
         let isCurrent = previous?.fingerprint == analysis.fingerprint
             && previous?.contextAlgorithmVersion == AIInsightsEngine.contextAlgorithmVersion
             && previous?.schemaVersion == AIInsights.currentSchemaVersion
 
-        guard isAIEnabled else {
-            state = AIInsightsViewState(availability: .disabled, insights: previousInsights, isStale: previousInsights != nil && !isCurrent, message: "Включи AI-помощника в настройках, чтобы обновить Insights.")
+        if analysis.weeklyWorkoutCount == 0 && analysis.measurementCount == 0 {
+            if previousInsights != nil { try? cache.clear() }
+            state = isAIEnabled
+                ? .empty(.noData, message: "За последние семь дней нет завершённых тренировок для анализа.")
+                : .empty(.disabled, message: "Включи AI-помощника в настройках, чтобы обновить Insights.")
             return
         }
-        if analysis.weeklyWorkoutCount == 0 {
-            if previousInsights != nil && !isCurrent { try? cache.clear() }
-            state = .empty(.noData, message: "За последние семь дней нет завершённых тренировок для анализа.")
+        guard isAIEnabled else {
+            state = AIInsightsViewState(availability: .disabled, insights: previousInsights, isStale: previousInsights != nil && !isCurrent, message: "Включи AI-помощника в настройках, чтобы обновить Insights.")
             return
         }
         if isCurrent, let previousInsights {
@@ -249,11 +308,12 @@ final class AIInsightsCoordinator {
         }
         if !allowGeneration {
             let hasKey = apiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            let hasConsent = requiredConsentCategories.isSubset(of: consentedCategories)
             state = AIInsightsViewState(
-                availability: hasKey ? .consentRequired : .missingKey,
+                availability: hasKey ? (hasConsent ? .ready : .consentRequired) : .missingKey,
                 insights: previousInsights,
                 isStale: previousInsights != nil,
-                message: hasKey ? "Для обновления нужно отдельно подтвердить передачу показателей в Google Gemini." : "Сохрани API-ключ Gemini в настройках, чтобы запросить Insights."
+                message: !hasKey ? "Сохрани API-ключ Gemini в настройках, чтобы запросить Insights." : (hasConsent ? "Сводка не обновляется автоматически. Нажми кнопку, когда захочешь отправить показатели в Google Gemini." : "Перед анализом нужно отдельно подтвердить отправку недельных показателей в Google Gemini.")
             )
             return
         }
@@ -264,7 +324,7 @@ final class AIInsightsCoordinator {
             state = AIInsightsViewState(availability: .missingKey, insights: previousInsights, isStale: previousInsights != nil, message: "Сохрани API-ключ Gemini в настройках.")
             return
         }
-        guard allowsPersonalData else {
+        guard requiredConsentCategories.isSubset(of: consentedCategories) else {
             state = AIInsightsViewState(availability: .consentRequired, insights: previousInsights, isStale: previousInsights != nil, message: "Перед анализом нужно разрешить отправку недельных показателей в Google Gemini.")
             return
         }
@@ -348,6 +408,22 @@ final class AIInsightsCoordinator {
         lastAttemptFingerprint = nil
         try? cache.clear()
         state = .empty(.noData)
+    }
+
+    func revokeConsent(using consentStore: AIConsentStore) {
+        consentStore.revoke()
+        clearCache()
+    }
+
+    func consentCategoriesChanged(from old: Set<AIDataCategory>, to new: Set<AIDataCategory>) {
+        if old.subtracting(new).contains(.weeklyInsights) || old.subtracting(new).contains(.bodyMeasurements) {
+            clearCache()
+        }
+    }
+
+    func updateCalendarContext(calendar: Calendar = .current, timeZone: TimeZone = .current) {
+        engine = AIInsightsEngine(calendar: calendar, timeZone: timeZone)
+        cancelCurrentRequest()
     }
 
     func cancelCurrentRequest() {

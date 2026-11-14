@@ -7,6 +7,7 @@ struct PremiumRootView: View {
     @Environment(Store.self) private var store
     @State private var selection = 0
     @State private var aiInsightsCoordinator = AIInsightsCoordinator()
+    @State private var aiConsentStore = AIConsentStore()
     var body: some View {
         ZStack(alignment: .bottom) {
             TeenTheme.ink.ignoresSafeArea()
@@ -23,6 +24,7 @@ struct PremiumRootView: View {
             PremiumTabBar(selection: $selection).padding(.horizontal, 20).padding(.bottom, 8)
         }
         .environment(aiInsightsCoordinator)
+        .environment(aiConsentStore)
         .tint(TeenTheme.lime)
         .preferredColorScheme(.dark)
         .alert("Сообщение", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
@@ -597,6 +599,8 @@ struct PremiumSettingsView: View {
         case delete
     }
     @Environment(Store.self) private var store
+    @Environment(AIConsentStore.self) private var aiConsentStore
+    @Environment(AIInsightsCoordinator.self) private var aiInsightsCoordinator
     @AppStorage("aiCoachEnabled") private var aiCoachEnabled = false
     @State private var aiKeyStore: any AIKeyStore = AIKeychainStore()
     @State private var aiKeyInput = ""
@@ -607,6 +611,8 @@ struct PremiumSettingsView: View {
     @State private var importing = false
     @State private var shareURL: URL?
     @State private var confirmClear = false
+    @State private var confirmRevokeAIConsent = false
+    @State private var presentsAIConsent = false
     @State private var message: String?
     var body: some View {
         NavigationStack { ScrollView(showsIndicators: false) { VStack(spacing: 16) {
@@ -628,7 +634,7 @@ struct PremiumSettingsView: View {
                 .padding(.top, 8)
             }
             TeenSectionTitle("информация")
-            TeenCard { VStack(alignment: .leading, spacing: 10) { Label("Только локальное хранение", systemImage: "lock.fill").font(.headline); Text("Тренировки, измерения и резервные копии не отправляются на сервер. JSON-копия нужна, чтобы перенести или восстановить свои данные.").font(.caption).foregroundStyle(TeenTheme.muted); Link(destination: URL(string: "https://t.me/sellyou4ss")!) { Label("Telegram разработчика", systemImage: "paperplane.fill").font(.subheadline.weight(.semibold)).foregroundStyle(TeenTheme.ice) } } }
+            TeenCard { VStack(alignment: .leading, spacing: 10) { Label("Локальное хранение", systemImage: "lock.fill").font(.headline); Text("Данные приложения остаются на устройстве. Выбранный контекст AI Coach отправляется Google Gemini только после отдельного согласия.").font(.caption).foregroundStyle(TeenTheme.muted); Link(destination: URL(string: "https://t.me/sellyou4ss")!) { Label("Telegram разработчика", systemImage: "paperplane.fill").font(.subheadline.weight(.semibold)).foregroundStyle(TeenTheme.ice) } } }
         }.frame(maxWidth: .infinity).padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 112) }.toolbar(.hidden, for: .navigationBar)
             .task { refreshAIKeyStatus() }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
@@ -643,8 +649,21 @@ struct PremiumSettingsView: View {
         TeenCard(accent: TeenTheme.violet) {
             VStack(alignment: .leading, spacing: 14) {
                 Toggle("Включить AI-помощника", isOn: $aiCoachEnabled).tint(TeenTheme.violet)
-                Text("На этом этапе включение сохраняет только настройку. Сетевые запросы Gemini ещё не выполняются.")
+                Text("Запросы отправляются Google Gemini только после отдельного согласия на выбранные категории данных.")
                     .font(.caption).foregroundStyle(TeenTheme.muted)
+                if aiConsentStore.hasConsent {
+                    Text("Разрешено: " + aiConsentStore.consentedCategories.map(\.consentTitle).sorted().joined(separator: ", "))
+                        .font(.caption).foregroundStyle(TeenTheme.muted)
+                    HStack {
+                        Button("Изменить категории") { presentsAIConsent = true }
+                        Button("Отозвать согласие", role: .destructive) { confirmRevokeAIConsent = true }
+                    }.font(.caption.weight(.semibold))
+                } else {
+                    Text("Персональные данные пока не разрешены к передаче. Согласие не меняет состояние переключателя AI.")
+                        .font(.caption).foregroundStyle(TeenTheme.muted)
+                    Button("Посмотреть категории данных") { presentsAIConsent = true }
+                        .font(.caption.weight(.semibold)).foregroundStyle(TeenTheme.lime)
+                }
                 SecureField(aiKeyAvailability == .present ? "Новый ключ для замены" : "API-ключ Gemini", text: $aiKeyInput)
                     .textContentType(.password)
                     .textInputAutocapitalization(.never)
@@ -693,6 +712,18 @@ struct PremiumSettingsView: View {
             Button("Отмена", role: .cancel) { pendingAIKeyMutation = nil }
         } message: {
             Text("Состояние Keychain неизвестно из-за ошибки. Перезапись заменит возможный сохранённый ключ; удаление безвозвратно удалит его, если он существует.")
+        }
+        .sheet(isPresented: $presentsAIConsent) {
+            AIConsentSheet(requiredCategories: [], initialCategories: aiConsentStore.consentedCategories)
+                .environment(aiConsentStore)
+        }
+        .confirmationDialog("Отозвать согласие на передачу данных?", isPresented: $confirmRevokeAIConsent, titleVisibility: .visible) {
+            Button("Отозвать согласие", role: .destructive) {
+                aiInsightsCoordinator.revokeConsent(using: aiConsentStore)
+            }
+            Button("Отмена", role: .cancel) { }
+        } message: {
+            Text("Новые персональные запросы будут заблокированы, а сохранённая AI-сводка удалена. Переключатель AI останется без изменений.")
         }
     }
     private func refreshAIKeyStatus() {

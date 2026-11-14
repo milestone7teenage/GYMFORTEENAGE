@@ -3,10 +3,12 @@ import SwiftUI
 struct AIChatView: View {
     @Environment(Store.self) private var store
     @Environment(AIInsightsCoordinator.self) private var insightsCoordinator
+    @Environment(AIConsentStore.self) private var consentStore
     @Environment(\.dismiss) private var dismiss
     @AppStorage("aiCoachEnabled") private var isAIEnabled = false
     @State private var session = AICoachSession()
     @State private var draft = ""
+    @State private var presentsConsent = false
     @FocusState private var inputFocused: Bool
 
     var body: some View {
@@ -50,6 +52,10 @@ struct AIChatView: View {
                             Button("Повторить") { retry() }
                                 .font(.caption.weight(.semibold)).foregroundStyle(TeenTheme.lime)
                         }
+                        if session.availability == .consentRequired {
+                            Button("Настроить согласие") { presentsConsent = true }
+                                .font(.caption.weight(.semibold)).foregroundStyle(TeenTheme.lime)
+                        }
                     }
                     .padding(.horizontal, 16).padding(.bottom, 8)
                 }
@@ -89,6 +95,10 @@ struct AIChatView: View {
             session.setStartingInsights(insights)
         }
         .onDisappear { session.cancelAndClear(); draft = "" }
+        .sheet(isPresented: $presentsConsent) {
+            AIConsentSheet(requiredCategories: session.pendingConsentCategories, initialCategories: consentStore.consentedCategories)
+                .environment(consentStore)
+        }
     }
 
     private var emptyState: some View {
@@ -145,7 +155,7 @@ struct AIChatView: View {
                     store: store,
                     apiKey: apiKey,
                     isAIEnabled: isAIEnabled,
-                    allowsPersonalData: false
+                    consentedCategories: consentStore.consentedCategories
                 )
                 if consumed { draft = "" }
             } catch {
@@ -165,7 +175,7 @@ struct AIChatView: View {
                     store: store,
                     apiKey: apiKey,
                     isAIEnabled: isAIEnabled,
-                    allowsPersonalData: false
+                    consentedCategories: consentStore.consentedCategories
                 )
             } catch {
                 session.setLocalError("Не удалось проверить API-ключ в защищённом хранилище. Повтори проверку в настройках.")

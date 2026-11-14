@@ -50,6 +50,63 @@ final class GeminiClientTests: XCTestCase {
         XCTAssertTrue(endpoint.absoluteString.hasPrefix("https://"))
     }
 
+    @MainActor
+    func testChatIsReadOnlyAndNeverSendsKeyOrStoreUUIDInURLOrBody() async throws {
+        let host = UUID().uuidString + ".test"
+        GeminiURLProtocolStub.configure(host: host, replies: [try Self.jsonResponse(text: "Сохраняй спокойный темп.")])
+        defer { GeminiURLProtocolStub.remove(host: host) }
+        let (client, session, _) = Self.makeClient(host: host)
+        defer { session.invalidateAndCancel() }
+        let storeURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
+        defer { try? FileManager.default.removeItem(at: storeURL) }
+        let store = Store(fileURL: storeURL)
+        var exercise = ExerciseLog(slotID: "sensitive-slot", exerciseID: "butterfly", actualID: "butterfly", status: "completed")
+        exercise.sets = [SetLog(weight: "25", reps: "8", skipped: false)]
+        let record = Record(workoutID: Catalog.workouts[0].id, name: "Тренировка", date: Date(), exercises: [exercise])
+        store.records = [record]
+        let measurement = Measure(kind: "weight", value: 62)
+        store.measures = [measurement]
+        let before = try JSONEncoder.pretty.encode(Backup(
+            records: store.records,
+            measures: store.measures,
+            water: store.water,
+            session: store.session,
+            instructions: store.instructions,
+            reminders: store.reminders
+        ))
+        let markerKey = "isolated-urlprotocol-test-key-\(UUID().uuidString)"
+        let coach = AICoachSession(requestCoordinator: AIRequestCoordinator(client: client))
+
+        let sent = await coach.send(
+            "Как менялась бабочка за неделю?",
+            store: store,
+            apiKey: markerKey,
+            isAIEnabled: true,
+            consentedCategories: [.chatMessages, .exerciseHistory, .weeklyInsights]
+        )
+
+        XCTAssertTrue(sent)
+        let after = try JSONEncoder.pretty.encode(Backup(
+            records: store.records,
+            measures: store.measures,
+            water: store.water,
+            session: store.session,
+            instructions: store.instructions,
+            reminders: store.reminders
+        ))
+        XCTAssertEqual(after, before, "AI processing must not mutate the user's Store.")
+        let captured = try XCTUnwrap(GeminiURLProtocolStub.requests(for: host).first)
+        let body = String(decoding: try XCTUnwrap(Self.bodyData(for: captured)), as: UTF8.self)
+        let requestURL = try XCTUnwrap(captured.url).absoluteString
+        XCTAssertFalse(body.contains(markerKey), "The API key must not be serialized into the request body.")
+        XCTAssertEqual(captured.value(forHTTPHeaderField: "x-goog-api-key"), markerKey)
+        XCTAssertFalse(requestURL.contains(markerKey))
+        XCTAssertFalse(body.contains(record.id.uuidString), "Local record UUIDs must not be sent.")
+        XCTAssertFalse(body.contains(measurement.id.uuidString), "Local measurement UUIDs must not be sent.")
+        XCTAssertFalse(requestURL.contains(record.id.uuidString))
+        coach.cancelAndClear()
+    }
+
     func testUnauthorizedMapsToSafeTypedError() async {
         let host = UUID().uuidString + ".test"
         GeminiURLProtocolStub.configure(host: host, replies: [.init(status: 401, data: Data("secret server body".utf8))])
@@ -258,6 +315,22 @@ final class GeminiClientTests: XCTestCase {
             maximumRetryDelay: 0
         )
         return (client, session, endpoint)
+    }
+
+    private static func bodyData(for request: URLRequest) -> Data? {
+        if let body = request.httpBody, !body.isEmpty { return body }
+        guard let stream = request.httpBodyStream else { return nil }
+        stream.open()
+        defer { stream.close() }
+        let buffer = UnsafeMutableRawPointer.allocate(byteCount: 4096, alignment: 1)
+        defer { buffer.deallocate() }
+        var data = Data()
+        while true {
+            let bytesRead = stream.read(buffer.assumingMemoryBound(to: UInt8.self), maxLength: 4096)
+            if bytesRead <= 0 { break }
+            data.append(buffer.assumingMemoryBound(to: UInt8.self), count: bytesRead)
+        }
+        return data.isEmpty ? nil : data
     }
 
     private static func jsonResponse(text: String, delay: TimeInterval = 0) throws -> GeminiURLProtocolStub.Reply {
