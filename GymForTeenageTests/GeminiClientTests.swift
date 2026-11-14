@@ -328,7 +328,7 @@ final class GeminiClientTests: XCTestCase {
         while true {
             let bytesRead = stream.read(buffer.assumingMemoryBound(to: UInt8.self), maxLength: 4096)
             if bytesRead <= 0 { break }
-            data.append(buffer.assumingMemoryBound(to: UInt8.self).prefix(bytesRead))
+            data.append(buffer.assumingMemoryBound(to: UInt8.self), count: bytesRead)
         }
         return data.isEmpty ? nil : data
     }
