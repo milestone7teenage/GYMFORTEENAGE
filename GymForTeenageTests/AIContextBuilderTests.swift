@@ -118,9 +118,11 @@ final class AIContextBuilderTests: XCTestCase {
         store.records = [record(date: Date().addingTimeInterval(-86400), exerciseID: "butterfly", weight: "20")]
 
         let workout = Catalog.workouts[0]
-        let session = store.current(workout)
-        session.exercises[0].sets = [SetLog(weight: "30", reps: "8", skipped: false), SetLog(weight: "30", reps: "6", skipped: false)]
-        session.exercises[0].status = "inProgress"
+        _ = store.current(workout)
+        store.mutate { session in
+            session.exercises[0].sets = [SetLog(weight: "30", reps: "8", skipped: false), SetLog(weight: "30", reps: "6", skipped: false)]
+            session.exercises[0].status = "inProgress"
+        }
 
         let selection = AIContextBuilder().build(for: "бабочка", store: store)
         let payload = try XCTUnwrap(selection.payloadJSON)
@@ -187,7 +189,6 @@ final class AIContextBuilderTests: XCTestCase {
     }
 
     private func record(date: Date, exerciseID: String, weight: String = "25") -> Record {
-        let exercise = Catalog.e(exerciseID)
         var log = ExerciseLog(slotID: "slot", exerciseID: exerciseID, actualID: exerciseID, status: "completed")
         log.sets = [SetLog(weight: weight, reps: "8", skipped: false)]
         return Record(workoutID: Catalog.workouts[0].id, name: "Тренировка", date: date, exercises: [log])

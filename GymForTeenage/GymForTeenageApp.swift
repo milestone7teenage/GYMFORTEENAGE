@@ -59,6 +59,15 @@ func recoverSkipped(){ guard let s=session, let idx=s.exercises.firstIndex(where
   }
   var totalTonnage:Double { records.reduce(0){$0+Metrics.tonnage($1.exercises)} }
   var completedSets:Int { records.reduce(0){$0+Metrics.completedSets($1.exercises)} }
+
+  var hasRealActiveWorkout: Bool {
+      guard let session = session else { return false }
+      let hasRecordedSets = session.exercises.contains { exercise in
+          exercise.sets.contains { set in !set.skipped && !set.weight.isEmpty && !set.reps.isEmpty }
+      }
+      let hasSkippedExercises = session.exercises.contains { $0.status == "skipped" }
+      return hasRecordedSets || hasSkippedExercises
+  }
 func export()->URL? { let b=Backup(records:records,measures:measures,water:water,session:session,instructions:instructions,reminders:reminders,creatineLog:creatineLog,creatineReminder:creatineReminder,creatineHour:creatineHour);guard let d=try? JSONEncoder.pretty.encode(b) else{return nil};let u=FileManager.default.temporaryDirectory.appendingPathComponent("GymForTeenage-Backup.json");try? d.write(to:u,options:.atomic);return u }
   func restore(_ data:Data) throws { guard data.count <= 20*1024*1024 else { throw NSError(domain:"GymBackup",code:3,userInfo:[NSLocalizedDescriptionKey:"Файл резервной копии слишком большой"])}; let b=try JSONDecoder.iso.decode(Backup.self,from:data);try BackupValidator.validate(b);let encoded=try JSONEncoder.pretty.encode(b);try encoded.write(to:url,options:.atomic);persistenceAvailable=true;records=b.records;measures=b.measures;water=b.water;session=b.session;instructions=b.instructions;reminders=b.reminders;creatineLog=b.creatineLog ?? [:];creatineReminder=b.creatineReminder ?? false;creatineHour=b.creatineHour ?? 20 }
   func clear(){records=[];measures=[];water=[];session=nil;instructions=[:];reminders=false;creatineLog=[:];creatineReminder=false;UNUserNotificationCenter.current().removeAllPendingNotificationRequests();save()}

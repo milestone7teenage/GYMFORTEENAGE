@@ -70,7 +70,7 @@ struct PremiumHomeView: View {
                 VStack(spacing: 18) {
                     header
                     HStack(spacing: 12) { measureCard("Вес", unit: "кг", kind: "weight", icon: "scalemass.fill", tint: TeenTheme.violet); measureCard("Рост", unit: "см", kind: "height", icon: "ruler.fill", tint: TeenTheme.ice) }
-                    TeenSectionTitle("тренировки", detail: store.session == nil ? "3 программы" : "есть активная")
+                    TeenSectionTitle("тренировки", detail: store.hasRealActiveWorkout ? "есть активная" : "3 программы")
                     workoutCarousel
                     TeenSectionTitle("вода сегодня", detail: "цель 3 000 мл")
                     waterCard
@@ -163,7 +163,7 @@ struct PremiumHomeView: View {
         }.buttonStyle(TeenPressStyle())
     }
     private func workoutCard(_ workout: Training, isSelected: Bool = false) -> some View {
-        let active = store.session?.workoutID == workout.id
+        let active = store.hasRealActiveWorkout && store.session?.workoutID == workout.id
         return NavigationLink { PremiumWorkoutView(workout: workout) } label: {
             TeenCard(accent: active ? TeenTheme.lime : (isSelected ? TeenTheme.violet : nil)) {
                 HStack(spacing: 14) {
@@ -377,9 +377,11 @@ struct PremiumProgressView: View {
     private var header: some View { HStack { VStack(alignment: .leading, spacing: 4) { Text("прогресс").font(.system(.largeTitle, design: .rounded, weight: .bold)); Text("История твоих тренировок").font(.subheadline).foregroundStyle(TeenTheme.muted) }; Spacer(); Image(systemName: "list.bullet.rectangle.fill").font(.title3).foregroundStyle(TeenTheme.lime).frame(width: 42, height: 42).background(TeenTheme.surface, in: Circle()) } }
     private func workoutHistoryCard(_ record: Record) -> some View {
         let nonSkippedExercises = record.exercises.filter { $0.status != "skipped" }
-        let completed = nonSkippedExercises.filter { !$0.sets.allSatisfy { $0.skipped } }
+        let completed = nonSkippedExercises.filter { exercise in
+            exercise.sets.contains { !$0.skipped && !$0.weight.isEmpty && !$0.reps.isEmpty }
+        }
         let skipped = record.exercises.filter { $0.status == "skipped" }
-        let sets = nonSkippedExercises.reduce(0) { $0 + $1.sets.filter { !$0.skipped }.count }
+        let sets = completed.reduce(0) { $0 + $1.sets.filter { !$0.skipped && !$0.weight.isEmpty && !$0.reps.isEmpty }.count }
         return TeenCard(accent: TeenTheme.violet) { HStack(spacing: 14) {
             Image(systemName: "figure.strengthtraining.traditional").font(.title2).foregroundStyle(TeenTheme.lime).frame(width: 48, height: 48).background(TeenTheme.lime.opacity(0.12), in: Circle())
             VStack(alignment: .leading, spacing: 4) {
@@ -402,8 +404,8 @@ struct PremiumWorkoutDetailScreen: View {
         ScrollView(showsIndicators: false) { VStack(spacing: 16) {
             headerCard
             TeenSectionTitle("выполненные упражнения")
-            if done.isEmpty { TeenCard { TeenEmpty(icon: "dumbbell", title: "Упражнений не было", detail: "В этой тренировке все упражнения были пропущены.") } }
-            ForEach(done) { log in exerciseDetail(log) }
+            if completedExercises.isEmpty { TeenCard { TeenEmpty(icon: "dumbbell", title: "Упражнений не было", detail: "В этой тренировке все упражнения были пропущены.") } }
+            ForEach(completedExercises) { log in exerciseDetail(log) }
             if !skipped.isEmpty {
                 TeenSectionTitle("пропущенные упражнения")
                 ForEach(skipped) { log in skippedCard(log) }
@@ -423,15 +425,20 @@ struct PremiumWorkoutDetailScreen: View {
         store.records.removeAll { $0.id == record.id }
         store.save()
     }
-    private var done: [ExerciseLog] { record.exercises.filter { $0.status != "skipped" } }
+    private var completedExercises: [ExerciseLog] {
+        record.exercises.filter { exercise in
+            exercise.status != "skipped" &&
+            exercise.sets.contains { !$0.skipped && !$0.weight.isEmpty && !$0.reps.isEmpty }
+        }
+    }
     private var skipped: [ExerciseLog] { record.exercises.filter { $0.status == "skipped" } }
-    private var totalSets: Int { record.exercises.flatMap { $0.sets }.filter { !$0.skipped }.count }
+    private var totalSets: Int { completedExercises.reduce(0) { $0 + $1.sets.filter { !$0.skipped && !$0.weight.isEmpty && !$0.reps.isEmpty }.count } }
     private var headerCard: some View {
         TeenCard(accent: TeenTheme.lime) { VStack(alignment: .leading, spacing: 6) {
             Text(record.name).font(.title2.bold())
             Text(record.date.ruLong).font(.subheadline).foregroundStyle(TeenTheme.muted)
             HStack(spacing: 8) {
-                TeenPill(title: "\(done.count) упражнений", tint: TeenTheme.lime)
+                TeenPill(title: "\(completedExercises.count) упражнений", tint: TeenTheme.lime)
                 if !skipped.isEmpty { TeenPill(title: "\(skipped.count) пропущено", tint: .red) }
                 TeenPill(title: "\(totalSets) подходов", tint: TeenTheme.ice)
             }
@@ -598,8 +605,6 @@ struct PremiumSettingsView: View {
         case delete
     }
     @Environment(Store.self) private var store
-    @Environment(AIConsentStore.self) private var aiConsentStore
-    @Environment(AIInsightsCoordinator.self) private var aiInsightsCoordinator
     @AppStorage("aiCoachEnabled") private var aiCoachEnabled = false
     @State private var aiKeyStore: any AIKeyStore = AIKeychainStore()
     @State private var aiKeyInput = ""
@@ -610,8 +615,6 @@ struct PremiumSettingsView: View {
     @State private var importing = false
     @State private var shareURL: URL?
     @State private var confirmClear = false
-    @State private var confirmRevokeAIConsent = false
-    @State private var presentsAIConsent = false
     @State private var message: String?
     var body: some View {
         NavigationStack { ScrollView(showsIndicators: false) { VStack(spacing: 16) {
@@ -648,21 +651,8 @@ struct PremiumSettingsView: View {
         TeenCard(accent: TeenTheme.violet) {
             VStack(alignment: .leading, spacing: 14) {
                 Toggle("Включить AI-помощника", isOn: $aiCoachEnabled).tint(TeenTheme.violet)
-                Text("Запросы отправляются Google Gemini только после отдельного согласия на выбранные категории данных.")
-                    .font(.caption).foregroundStyle(TeenTheme.muted)
-                if aiConsentStore.hasConsent {
-                    Text("Разрешено: " + aiConsentStore.consentedCategories.map(\.consentTitle).sorted().joined(separator: ", "))
-                        .font(.caption).foregroundStyle(TeenTheme.muted)
-                    HStack {
-                        Button("Изменить категории") { presentsAIConsent = true }
-                        Button("Отозвать согласие", role: .destructive) { confirmRevokeAIConsent = true }
-                    }.font(.caption.weight(.semibold))
-                } else {
-                    Text("Персональные данные пока не разрешены к передаче. Согласие не меняет состояние переключателя AI.")
-                        .font(.caption).foregroundStyle(TeenTheme.muted)
-                    Button("Посмотреть категории данных") { presentsAIConsent = true }
-                        .font(.caption.weight(.semibold)).foregroundStyle(TeenTheme.lime)
-                }
+                Button("Изменить категории") { presentsAIConsent = true }
+                    .font(.caption.weight(.semibold)).foregroundStyle(TeenTheme.lime)
                 SecureField(aiKeyAvailability == .present ? "Новый ключ для замены" : "API-ключ Gemini", text: $aiKeyInput)
                     .textContentType(.password)
                     .textInputAutocapitalization(.never)
@@ -693,7 +683,6 @@ struct PremiumSettingsView: View {
                         .foregroundStyle(aiKeyStatusIsError ? .red : (aiKeyAvailability == .present ? TeenTheme.lime : TeenTheme.muted))
                     Text(aiKeyStatus).font(.caption).foregroundStyle(aiKeyStatusIsError ? .red : TeenTheme.muted)
                     Spacer()
-                    Button(aiKeyAvailability == .unknown ? "Повторить проверку" : "Проверить локально") { refreshAIKeyStatus() }.font(.caption.weight(.semibold))
                 }
             }
         }
@@ -711,18 +700,6 @@ struct PremiumSettingsView: View {
             Button("Отмена", role: .cancel) { pendingAIKeyMutation = nil }
         } message: {
             Text("Состояние Keychain неизвестно из-за ошибки. Перезапись заменит возможный сохранённый ключ; удаление безвозвратно удалит его, если он существует.")
-        }
-        .sheet(isPresented: $presentsAIConsent) {
-            AIConsentSheet(requiredCategories: [], initialCategories: aiConsentStore.consentedCategories)
-                .environment(aiConsentStore)
-        }
-        .confirmationDialog("Отозвать согласие на передачу данных?", isPresented: $confirmRevokeAIConsent, titleVisibility: .visible) {
-            Button("Отозвать согласие", role: .destructive) {
-                aiInsightsCoordinator.revokeConsent(using: aiConsentStore)
-            }
-            Button("Отмена", role: .cancel) { }
-        } message: {
-            Text("Новые персональные запросы будут заблокированы, а сохранённая AI-сводка удалена. Переключатель AI останется без изменений.")
         }
     }
     private func refreshAIKeyStatus() {
