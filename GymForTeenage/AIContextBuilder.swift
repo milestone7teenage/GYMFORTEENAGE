@@ -118,8 +118,13 @@ struct AIContextBuilder {
             return selection(scope: scope, payload: payload, category: .exerciseHistory, clarification: nil)
         }
 
-        // Check water/measurement questions BEFORE general workout question
-        if normalizedQuestion.contains("вода") || normalizedQuestion.contains("пить") || normalizedQuestion.contains("пил") || normalizedQuestion.contains("гидратац") || normalizedQuestion.contains("мл") || normalizedQuestion.contains("литр") {
+        // 1. Follow-up with activeScope has HIGHEST priority (before category detection)
+        if isFollowUp(normalizedQuestion), let activeScope {
+            return build(scope: activeScope, question: normalizedQuestion, store: store, now: now)
+        }
+
+        // 2. Water/hydration questions (contains water-related keywords)
+        if normalizedQuestion.contains("вода") || normalizedQuestion.contains("пить") || normalizedQuestion.contains("пил") || normalizedQuestion.contains("выпил") || normalizedQuestion.contains("гидратац") || normalizedQuestion.contains("мл") || normalizedQuestion.contains("литр") {
             let scope = AIContextScope(category: .waterIntake, exerciseID: nil, measurementKind: nil, startDate: period.start, endDate: period.end)
             let entries = store.water
                 .filter { dayDate($0.day).map { $0 >= period.start && $0 < period.end } ?? false }
@@ -129,6 +134,7 @@ struct AIContextBuilder {
             return selection(scope: scope, payload: AIWaterContext(period: period.label, entries: entries), category: .waterIntake, clarification: nil)
         }
 
+        // 3. Body measurement specific questions
         if normalizedQuestion.contains("рост") || normalizedQuestion.contains("масса тела") || normalizedQuestion.contains("вес тела") || normalizedQuestion.contains("похудел") || normalizedQuestion.contains("набрал вес") {
             let kind = normalizedQuestion.contains("рост") ? "height" : "weight"
             let scope = AIContextScope(category: .bodyMeasurements, exerciseID: nil, measurementKind: kind, startDate: period.start, endDate: period.end)
@@ -140,12 +146,7 @@ struct AIContextBuilder {
             return selection(scope: scope, payload: AIMeasurementContext(period: period.label, kind: kind, entries: entries), category: .bodyMeasurements, clarification: nil)
         }
 
-        // Follow-up questions with active scope should be checked BEFORE general workout
-        if isFollowUp(normalizedQuestion), let activeScope {
-            return build(scope: activeScope, question: normalizedQuestion, store: store, now: now)
-        }
-
-        // General workout question - only when no specific exercise matched and no water/measurement question
+        // 4. General workout question (explicit workout/weight/program keywords, but NOT water/body)
         if isGeneralWorkoutQuestion(normalizedQuestion) {
             let scope = AIContextScope(category: .exerciseHistory, exerciseID: nil, measurementKind: nil, startDate: period.start, endDate: period.end)
             let entries = buildGeneralWorkoutHistory(store: store, period: period)
@@ -153,7 +154,7 @@ struct AIContextBuilder {
             return selection(scope: scope, payload: payload, category: .exerciseHistory, clarification: nil)
         }
 
-        // Body measurements - generic "вес" / "измерен" after workout-specific checks
+        // 5. Generic body measurement (just "вес" or "измерен")
         if normalizedQuestion.contains("вес") || normalizedQuestion.contains("измерен") {
             let kind = normalizedQuestion.contains("рост") ? "height" : "weight"
             let scope = AIContextScope(category: .bodyMeasurements, exerciseID: nil, measurementKind: kind, startDate: period.start, endDate: period.end)
@@ -165,6 +166,7 @@ struct AIContextBuilder {
             return selection(scope: scope, payload: AIMeasurementContext(period: period.label, kind: kind, entries: entries), category: .bodyMeasurements, clarification: nil)
         }
 
+        // 6. Weekly insights
         if normalizedQuestion.contains("недел") || normalizedQuestion.contains("сводк") || normalizedQuestion.contains("обзор") || normalizedQuestion.contains("мой прогресс") || normalizedQuestion.contains("мои трениров") {
             let scope = AIContextScope(category: .weeklyInsights, exerciseID: nil, measurementKind: nil, startDate: period.start, endDate: period.end)
             return AIContextSelection(scope: scope, payloadJSON: nil, categories: [.weeklyInsights], clarification: nil)
@@ -310,6 +312,7 @@ struct AIContextBuilder {
 
         let questionLower = question.lowercased()
 
+        // Step 1: Exact matches (full title or ID)
         let exactMatches = Catalog.all.filter { exercise in
             let title = normalizedTitle(exercise)
             let id = normalizedID(exercise)
@@ -322,7 +325,7 @@ struct AIContextBuilder {
         }
         if !exactMatches.isEmpty { return exactMatches }
 
-        // Step 2: Check if any word from query is contained in exercise title (localized case-insensitive)
+        // Step 2: Substring match - check if any query word (>=3 chars) is contained in exercise title
         let queryWords = questionLower.split(separator: " ").map(String.init)
         let containsMatches = Catalog.all.filter { exercise in
             let titleLower = exercise.title.lowercased()
@@ -332,8 +335,8 @@ struct AIContextBuilder {
         }
         if !containsMatches.isEmpty { return containsMatches }
 
-        // Step 3: Stem-based matching with relaxed threshold
-        let ignoredWords: Set<String> = ["в", "на", "под", "за", "по", "моей", "моем", "моём", "мой", "моя", "мои", "упражнение", "как", "менялась", "менялся", "история", "прогресс", "рабочий", "вес", "подход", "за", "неделю", "месяц", "дня", "дней", "делать", "делаю", "сколько", "на", "как", "менялась", "менялся", "родился", "родилась", "родилось"]
+        // Step 3: Stem-based fuzzy matching with Levenshtein for short words
+        let ignoredWords: Set<String> = ["в", "на", "под", "за", "по", "моей", "моем", "моём", "мой", "моя", "мои", "упражнение", "как", "менялась", "менялся", "история", "прогресс", "рабочий", "вес", "подход", "за", "неделю", "месяц", "дня", "дней", "делать", "делаю", "сколько", "на", "как", "менялась", "менялся", "родился", "родилась", "родилось", "а", "и", "о", "у", "ы", "э", "ю", "я"]
         let questionWords = question.split(separator: " ").map(String.init)
         let usefulWords = questionWords
             .map { stemRussian($0) }
