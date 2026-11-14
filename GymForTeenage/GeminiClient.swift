@@ -308,7 +308,7 @@ actor GeminiClient: GeminiGenerating {
         return String(trimmed.prefix(500))
     }
 
-    private static func logHTTPFailure(status: Int, endpoint: URL, message: String?) {
+    private static func logHTTPFailure(status: Int, endpoint: URL, message: String? = nil) {
         let endpointSafe = endpoint.host ?? endpoint.absoluteString
         let safeMessage = message.map { $0.replacingOccurrences(of: "\r", with: " ").replacingOccurrences(of: "\n", with: " ") } ?? ""
         os_log("Gemini request failed: status=%{public}d endpoint=%{public}s detail=%{public}s",
