@@ -100,9 +100,7 @@ struct AIInsightsSection: View {
             Task { await refresh(force: false, allowGeneration: false) }
         }
         .onChange(of: consentStore.consentedCategories) { oldCategories, newCategories in
-            if oldCategories.contains(.weeklyInsights) && !newCategories.contains(.weeklyInsights) {
-                coordinator.clearCache()
-            }
+            coordinator.consentCategoriesChanged(from: oldCategories, to: newCategories)
             Task { await refresh(force: false, allowGeneration: false) }
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name.NSCalendarDayChanged)) { _ in
@@ -112,13 +110,14 @@ struct AIInsightsSection: View {
             Task { await refresh(force: false, allowGeneration: false) }
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name.NSSystemTimeZoneDidChange)) { _ in
+            coordinator.updateCalendarContext()
             Task { await refresh(force: false, allowGeneration: false) }
         }
         .sheet(isPresented: $presentsChat) {
             AIChatView().environment(store).environment(coordinator).presentationDetents([.large])
         }
         .sheet(isPresented: $presentsConsent) {
-            AIConsentSheet(requiredCategories: [.weeklyInsights], initialCategories: consentStore.consentedCategories)
+            AIConsentSheet(requiredCategories: coordinator.requiredConsentCategories, initialCategories: consentStore.consentedCategories)
                 .environment(consentStore)
         }
     }
@@ -191,6 +190,8 @@ struct AIInsightsSection: View {
         case "workouts_7d": return "Тренировки · 7 дн."
         case "completed_sets_7d": return "Подходы · 7 дн."
         case "tonnage_7d": return "Тоннаж · 7 дн."
+        case "latest_weight_kg": return "Последний вес"
+        case "latest_height_cm": return "Последний рост"
         default: return key
         }
     }

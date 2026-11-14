@@ -156,6 +156,38 @@ final class AIRequestCoordinatorTests: XCTestCase {
         XCTAssertEqual(counts.requests, 0)
     }
 
+    func testFirstChatRequestWaitsForConsentThenContinuesAfterGrant() async throws {
+        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+        let store = Store(fileURL: fileURL)
+        store.records = [record(date: Date())]
+        let client = RequestCoordinatorStub()
+        let session = AICoachSession(requestCoordinator: AIRequestCoordinator(client: client))
+        let question = "Как менялась бабочка за неделю?"
+
+        let firstAttempt = await session.send(question, store: store, apiKey: "test-key", isAIEnabled: true, consentedCategories: [])
+        XCTAssertFalse(firstAttempt)
+        XCTAssertEqual(session.availability, .consentRequired)
+        XCTAssertTrue(session.messages.isEmpty)
+        XCTAssertTrue(session.pendingConsentCategories.isSuperset(of: [.chatMessages, .exerciseHistory]))
+        let blockedCount = await client.counts()
+        XCTAssertEqual(blockedCount.requests, 0)
+
+        let acceptedAttempt = await session.send(
+            question,
+            store: store,
+            apiKey: "test-key",
+            isAIEnabled: true,
+            consentedCategories: [.chatMessages, .exerciseHistory]
+        )
+
+        XCTAssertTrue(acceptedAttempt)
+        XCTAssertEqual(session.availability, .idle)
+        let acceptedCount = await client.counts()
+        XCTAssertEqual(acceptedCount.requests, 1)
+        session.cancelAndClear()
+    }
+
     func testChatRequiresConsentForCategoriesAlreadyInSessionHistory() async throws {
         let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
         defer { try? FileManager.default.removeItem(at: fileURL) }

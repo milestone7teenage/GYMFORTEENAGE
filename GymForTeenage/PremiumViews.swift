@@ -719,8 +719,7 @@ struct PremiumSettingsView: View {
         }
         .confirmationDialog("Отозвать согласие на передачу данных?", isPresented: $confirmRevokeAIConsent, titleVisibility: .visible) {
             Button("Отозвать согласие", role: .destructive) {
-                aiConsentStore.revoke()
-                aiInsightsCoordinator.clearCache()
+                aiInsightsCoordinator.revokeConsent(using: aiConsentStore)
             }
             Button("Отмена", role: .cancel) { }
         } message: {
