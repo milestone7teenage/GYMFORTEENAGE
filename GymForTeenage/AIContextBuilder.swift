@@ -135,11 +135,11 @@ struct AIContextBuilder {
 
 // 2. Water/hydration questions (contains water-related keywords by token boundaries)
 let questionLower = question.lowercased()
-let questionTokens = questionLower.split(separator: " ")
-let waterKeywords = ["вода", "воды", "воду", "водой", "vod", "вод", "пью", "пил", "пила", "пить", "выпил", "пит", "мл", "литр", "литра", "литров", "гидратация", "гидратации"]
+let questionTokens = questionLower.split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+let waterKeywords = ["вода", "воды", "воду", "водой", "воде", "пью", "пил", "пила", "пить", "выпил", "пит", "мл", "литр", "литра", "литров", "гидратация", "гидратации"]
 let hasWaterKeyword = questionTokens.contains { token in
-    waterKeywords.contains { kw in token.lowercased().contains(kw) && 
-      (token.lowercased() == kw || token.lowercased().hasPrefix(kw) || token.lowercased().hasSuffix(kw)) }
+    let tokenStr = String(token).lowercased()
+    return waterKeywords.contains { kw in tokenStr == kw || tokenStr.hasPrefix(kw) || tokenStr.hasSuffix(kw) }
 }
 if hasWaterKeyword {
             let scope = AIContextScope(category: .waterIntake, exerciseID: nil, measurementKind: nil, startDate: period.start, endDate: period.end)
