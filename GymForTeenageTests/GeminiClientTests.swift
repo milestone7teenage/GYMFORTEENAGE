@@ -96,7 +96,7 @@ final class GeminiClientTests: XCTestCase {
         ))
         XCTAssertEqual(after, before, "AI processing must not mutate the user's Store.")
         let captured = try XCTUnwrap(GeminiURLProtocolStub.requests(for: host).first)
-        let body = String(decoding: try XCTUnwrap(captured.httpBody), as: UTF8.self)
+        let body = String(decoding: try XCTUnwrap(Self.bodyData(for: captured)), as: UTF8.self)
         let requestURL = try XCTUnwrap(captured.url).absoluteString
         XCTAssertFalse(body.contains(markerKey), "The API key must not be serialized into the request body.")
         XCTAssertEqual(captured.value(forHTTPHeaderField: "x-goog-api-key"), markerKey)
@@ -315,6 +315,22 @@ final class GeminiClientTests: XCTestCase {
             maximumRetryDelay: 0
         )
         return (client, session, endpoint)
+    }
+
+    private static func bodyData(for request: URLRequest) -> Data? {
+        if let body = request.httpBody, !body.isEmpty { return body }
+        guard let stream = request.httpBodyStream else { return nil }
+        stream.open()
+        defer { stream.close() }
+        let buffer = UnsafeMutableRawPointer.allocate(byteCount: 4096, alignment: 1)
+        defer { buffer.deallocate() }
+        var data = Data()
+        while true {
+            let bytesRead = stream.read(buffer.assumingMemoryBound(to: UInt8.self), maxLength: 4096)
+            if bytesRead <= 0 { break }
+            data.append(buffer.assumingMemoryBound(to: UInt8.self).prefix(bytesRead))
+        }
+        return data.isEmpty ? nil : data
     }
 
     private static func jsonResponse(text: String, delay: TimeInterval = 0) throws -> GeminiURLProtocolStub.Reply {
