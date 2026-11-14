@@ -120,11 +120,28 @@ struct AIContextBuilder {
 
         // 1. Follow-up with activeScope has HIGHEST priority (before category detection)
         if isFollowUp(normalizedQuestion), let activeScope {
+            // Direct water context collection without re-classification
+            if activeScope.category == .waterIntake {
+                let entries = store.water
+                    .filter { dayDate($0.day).map { $0 >= period.start && $0 < period.end } ?? false }
+                    .sorted { $0.day < $1.day }
+                    .suffix(90)
+                    .map { AIWaterContext.Entry(day: $0.day, milliliters: $0.ml) }
+                return selection(scope: activeScope, payload: AIWaterContext(period: period.label, entries: entries), category: .waterIntake, clarification: nil)
+            }
+            // For other activeScopes, continue with normal build
             return build(scope: activeScope, question: normalizedQuestion, store: store, now: now)
         }
 
-        // 2. Water/hydration questions (contains water-related keywords)
-        if normalizedQuestion.contains("вода") || normalizedQuestion.contains("пить") || normalizedQuestion.contains("пил") || normalizedQuestion.contains("выпил") || normalizedQuestion.contains("гидратац") || normalizedQuestion.contains("мл") || normalizedQuestion.contains("литр") {
+// 2. Water/hydration questions (contains water-related keywords by token boundaries)
+let questionLower = question.lowercased()
+let questionTokens = questionLower.split(separator: " ")
+let waterKeywords = ["вода", "воды", "воду", "водой", "vod", "вод", "пью", "пил", "пила", "пить", "выпил", "пит", "мл", "литр", "литра", "литров", "гидратация", "гидратации"]
+let hasWaterKeyword = questionTokens.contains { token in
+    waterKeywords.contains { kw in token.lowercased().contains(kw) && 
+      (token.lowercased() == kw || token.lowercased().hasPrefix(kw) || token.lowercased().hasSuffix(kw)) }
+}
+if hasWaterKeyword {
             let scope = AIContextScope(category: .waterIntake, exerciseID: nil, measurementKind: nil, startDate: period.start, endDate: period.end)
             let entries = store.water
                 .filter { dayDate($0.day).map { $0 >= period.start && $0 < period.end } ?? false }
@@ -277,7 +294,7 @@ struct AIContextBuilder {
 
     private func isGeneralWorkoutQuestion(_ question: String) -> Bool {
         let workoutKeywords = ["трен", "упражнен", "подход", "рабочий вес", "программ", "план тренировок"]
-        let excludeKeywords = ["вод", "пил", "выпил", "мл", "литр", "гидратац", "рост", "масса тела", "вес тела", "похудел", "набрал вес", "измерен"]
+        let excludeKeywords = ["вод", "пил", "выпил", "мл", "литр", "гидратац", "рост", "масса тела", "похудел", "набрал вес", "измерен"]
         let hasWorkoutKeyword = workoutKeywords.contains { question.contains($0) }
         let hasExcludeKeyword = excludeKeywords.contains { question.contains($0) }
         return hasWorkoutKeyword && !hasExcludeKeyword

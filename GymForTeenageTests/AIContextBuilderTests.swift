@@ -56,7 +56,7 @@ final class AIContextBuilderTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: url) }
         store.records = [record(date: Date(), exerciseID: "hammerpress", weight: "40")]
 
-        let selection = AIContextBuilder().build(for: "жас родился", store: store)
+        let selection = AIContextBuilder().build(for: "как делать жим груди в хаммере", store: store)
         let payload = try XCTUnwrap(selection.payloadJSON)
 
         XCTAssertTrue(payload.contains("Жим груди в Хаммере"))
@@ -67,7 +67,7 @@ final class AIContextBuilderTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: url) }
         store.records = [record(date: Date(), exerciseID: "tbar", weight: "60")]
 
-        let selection = AIContextBuilder().build(for: "тяга", store: store)
+        let selection = AIContextBuilder().build(for: "грифа", store: store)
         let payload = try XCTUnwrap(selection.payloadJSON)
 
         XCTAssertTrue(payload.contains("Тяга Т-грифа"))
