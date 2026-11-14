@@ -605,6 +605,7 @@ struct PremiumSettingsView: View {
         case delete
     }
     @Environment(Store.self) private var store
+    @Environment(AIConsentStore.self) private var aiConsentStore
     @AppStorage("aiCoachEnabled") private var aiCoachEnabled = false
     @State private var aiKeyStore: any AIKeyStore = AIKeychainStore()
     @State private var aiKeyInput = ""
@@ -616,6 +617,7 @@ struct PremiumSettingsView: View {
     @State private var shareURL: URL?
     @State private var confirmClear = false
     @State private var message: String?
+    @State private var presentsAIConsent = false
     var body: some View {
         NavigationStack { ScrollView(showsIndicators: false) { VStack(spacing: 16) {
             HStack { VStack(alignment: .leading, spacing: 4) { Text("настройки").font(.system(.largeTitle, design: .rounded, weight: .bold)); Text("Данные остаются на устройстве").font(.subheadline).foregroundStyle(TeenTheme.muted) }; Spacer() }
@@ -645,6 +647,10 @@ struct PremiumSettingsView: View {
             .confirmationDialog("Удалить все пользовательские данные?", isPresented: $confirmClear, titleVisibility: .visible) { Button("Удалить данные", role: .destructive) { store.clear() }; Button("Отмена", role: .cancel) { } } message: { Text("История тренировок, измерения, вода, инструкции и активная тренировка будут удалены.") }
             .sheet(item: Binding(get: { shareURL.map { ShareItem(url: $0) } }, set: { shareURL = $0?.url })) { ActivityView(url: $0.url) }
             .alert("Информация", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) { Button("ОК") { message = nil } } message: { Text(message ?? "") }
+            .sheet(isPresented: $presentsAIConsent) {
+                AIConsentSheet(requiredCategories: [], initialCategories: aiConsentStore.consentedCategories)
+                    .environment(aiConsentStore)
+            }
         }
     }
     private var aiSettingsCard: some View {
