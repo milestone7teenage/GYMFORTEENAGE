@@ -147,8 +147,7 @@ struct AIInsightsSection: View {
     private var showsAction: Bool {
         if keychainError != nil { return true }
         switch coordinator.state.availability {
-        case .missingKey, .failed, .consentRequired: return true
-        case .ready: return coordinator.state.isStale
+        case .missingKey, .failed, .consentRequired, .ready: return true
         case .disabled, .loading, .noData: return false
         }
     }
@@ -156,7 +155,7 @@ struct AIInsightsSection: View {
     private var actionTitle: String {
         if keychainError != nil || coordinator.state.availability == .missingKey { return "Повторить проверку ключа" }
         if coordinator.state.availability == .consentRequired { return "Выбрать данные для передачи" }
-        return coordinator.state.insights == nil ? "Повторить запрос" : "Обновить сводку"
+        return coordinator.state.insights == nil ? "Сгенерировать сводку" : (coordinator.state.isStale ? "Обновить сводку" : "Снова вычислить сводку")
     }
 
     private var analysisFingerprint: String {

@@ -69,7 +69,7 @@ enum GeminiClientError: Error, Equatable {
     case forbidden
     case rateLimited(retryAfter: Int)
     case server(status: Int)
-    case rejected(status: Int)
+    case rejected(status: Int, message: String?)
     case invalidResponse
     case blockedResponse
     case emptyResponse
@@ -87,7 +87,9 @@ enum GeminiClientError: Error, Equatable {
         case .forbidden: return "Gemini отклонил запрос. Проверьте доступность API и настройки проекта Google."
         case .rateLimited: return "Слишком много запросов к Gemini. Подождите и повторите попытку."
         case .server: return "Сервис Gemini временно недоступен. Попробуйте позже."
-        case .rejected: return "Gemini не смог обработать запрос. Попробуйте изменить формулировку."
+        case let .rejected(_, message):
+            if let message, !message.isEmpty { return "Gemini отклонил запрос: \(message)" }
+            return "Gemini не смог обработать запрос. Попробуйте изменить формулировку."
         case .invalidResponse: return "Gemini вернул ответ в неизвестном формате."
         case .blockedResponse: return "Gemini не смог ответить на этот запрос. Попробуйте безопасно переформулировать его."
         case .emptyResponse: return "Gemini вернул пустой ответ. Попробуйте ещё раз."

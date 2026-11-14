@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import os
 
 protocol GeminiGenerating: Sendable {
     func generateContent(_ request: GeminiGenerateContentRequest, apiKey: String) async throws -> String
@@ -250,8 +251,13 @@ actor GeminiClient: GeminiGenerating {
                 throw GeminiClientError.rateLimited(retryAfter: max(1, Int(ceil(delay))))
             }
             guard (200..<300).contains(httpResponse.statusCode) else {
-                if (500..<600).contains(httpResponse.statusCode) { throw GeminiClientError.server(status: httpResponse.statusCode) }
-                throw GeminiClientError.rejected(status: httpResponse.statusCode)
+                if (500..<600).contains(httpResponse.statusCode) {
+                    logHTTPFailure(status: httpResponse.statusCode, body: data, endpoint: endpoint)
+                    throw GeminiClientError.server(status: httpResponse.statusCode)
+                }
+                let serverMessage = safeServerMessage(from: data)
+                logHTTPFailure(status: httpResponse.statusCode, body: data, endpoint: endpoint)
+                throw GeminiClientError.rejected(status: httpResponse.statusCode, message: serverMessage)
             }
             for try await byte in bytes {
                 guard data.count < responseLimit else { throw GeminiClientError.responseTooLarge }
@@ -285,6 +291,23 @@ actor GeminiClient: GeminiGenerating {
         case .server(status: 500), .server(status: 502), .server(status: 503), .server(status: 504): return true
         default: return false
         }
+    }
+
+    private static func safeServerMessage(from data: Data) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let error = object["error"] as? [String: Any],
+              let message = error["message"] as? String else {
+            return nil
+        }
+        return message
+    }
+
+    private static func logHTTPFailure(status: Int, body: Data, endpoint: URL) {
+        let truncated = String(decoding: body.prefix(512), as: UTF8.self)
+        let endpointSafe = endpoint.host ?? endpoint.absoluteString
+        os_log("Gemini request failed: status=%{public}d endpoint=%{public}s body=%{public}s",
+               log: OSLog(subsystem: "com.gymforteenage.ai", category: "GeminiClient"),
+               type: .error, status, endpointSafe, truncated)
     }
 
     private static func retryAfter(from response: HTTPURLResponse, fallback: TimeInterval) -> TimeInterval {
