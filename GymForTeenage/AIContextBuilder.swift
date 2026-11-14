@@ -146,6 +146,8 @@ struct AIContextBuilder {
 
     private func build(scope: AIContextScope, question: String, store: Store, now: Date) -> AIContextSelection {
         switch scope.category {
+        case .chatMessages:
+            return AIContextSelection(scope: scope, payloadJSON: nil, categories: [.chatMessages], clarification: nil)
         case .exerciseHistory:
             guard let id = scope.exerciseID, let exercise = Catalog.all.first(where: { $0.id == id }) else {
                 return AIContextSelection(scope: nil, payloadJSON: nil, categories: [], clarification: "Уточни, пожалуйста, упражнение.")
