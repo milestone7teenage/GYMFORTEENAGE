@@ -39,6 +39,47 @@ final class AIInsightsCoordinatorTests: XCTestCase {
         XCTAssertEqual(analysis.weeklyWorkoutCount, 2)
         XCTAssertEqual(analysis.computedMetrics.first(where: { $0.key == "completed_sets_7d" })?.value, 2)
         XCTAssertEqual(analysis.computedMetrics.first(where: { $0.key == "tonnage_7d" })?.value, 350)
+        XCTAssertNil(analysis.computedMetrics.first(where: { $0.key == "active_sets" }))
+        XCTAssertNil(analysis.computedMetrics.first(where: { $0.key == "active_tonnage" }))
+    }
+
+    func testActiveWorkoutMetricsAreAddedSeparately() {
+        let (store, storeURL, cacheURL) = fixture()
+        defer { try? FileManager.default.removeItem(at: storeURL); try? FileManager.default.removeItem(at: cacheURL) }
+        let now = Date()
+        store.records = [record(date: now.addingTimeInterval(-86400), weight: "20", reps: "10")]
+
+        let workout = Catalog.workouts[0]
+        let session = store.current(workout)
+        session.exercises[0].sets = [SetLog(weight: "30", reps: "8", skipped: false), SetLog(weight: "30", reps: "6", skipped: false)]
+        session.exercises[0].status = "inProgress"
+
+        let analysis = AIInsightsEngine().build(from: store, now: now)
+
+        XCTAssertEqual(analysis.weeklyWorkoutCount, 1)
+        XCTAssertEqual(analysis.computedMetrics.first(where: { $0.key == "completed_sets_7d" })?.value, 1)
+        XCTAssertEqual(analysis.computedMetrics.first(where: { $0.key == "tonnage_7d" })?.value, 200)
+        XCTAssertEqual(analysis.computedMetrics.first(where: { $0.key == "active_sets" })?.value, 2)
+        XCTAssertEqual(analysis.computedMetrics.first(where: { $0.key == "active_tonnage" })?.value, 420)
+    }
+
+    func testActiveWorkoutNotDoubleCountedInWeekly() {
+        let (store, storeURL, cacheURL) = fixture()
+        defer { try? FileManager.default.removeItem(at: storeURL); try? FileManager.default.removeItem(at: cacheURL) }
+        let now = Date()
+        store.records = [record(date: now, weight: "20", reps: "10")]
+
+        let workout = Catalog.workouts[0]
+        let session = store.current(workout)
+        session.exercises[0].sets = [SetLog(weight: "30", reps: "8", skipped: false)]
+
+        let analysis = AIInsightsEngine().build(from: store, now: now)
+
+        XCTAssertEqual(analysis.weeklyWorkoutCount, 1)
+        XCTAssertEqual(analysis.computedMetrics.first(where: { $0.key == "completed_sets_7d" })?.value, 1)
+        XCTAssertEqual(analysis.computedMetrics.first(where: { $0.key == "tonnage_7d" })?.value, 200)
+        XCTAssertEqual(analysis.computedMetrics.first(where: { $0.key == "active_sets" })?.value, 1)
+        XCTAssertEqual(analysis.computedMetrics.first(where: { $0.key == "active_tonnage" })?.value, 240)
     }
 
     func testFingerprintChangesWhenParticipatingOldWorkoutChangesOrIsDeleted() {

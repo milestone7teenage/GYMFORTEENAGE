@@ -95,9 +95,20 @@ struct AIInsightsEngine {
         let weekStart = calendar.date(byAdding: .day, value: -6, to: today) ?? today
         let endExclusive = calendar.date(byAdding: .day, value: 1, to: today) ?? now
         let comparisonWindowStart = calendar.date(byAdding: .day, value: -29, to: today) ?? today
+        let activeWorkoutID = store.session?.workoutID
         let weekly = store.records
             .filter { $0.date >= weekStart && $0.date < endExclusive }
             .sorted(by: recordOrder)
+        let completedSets = weekly.reduce(0) { $0 + Metrics.completedSets($1.exercises) }
+        let tonnage = weekly.reduce(0.0) { $0 + Metrics.tonnage($1.exercises) }
+
+        var activeSets = 0
+        var activeTonnage = 0.0
+        if let session = store.session {
+            activeSets = Metrics.completedSets(session.exercises)
+            activeTonnage = Metrics.tonnage(session.exercises)
+        }
+
         let comparisons = store.records
             .filter { $0.date >= comparisonWindowStart && $0.date < weekStart }
             .sorted { lhs, rhs in
@@ -113,14 +124,18 @@ struct AIInsightsEngine {
             localCalendarDate: dayString(today),
             timeZoneIdentifier: timeZone.identifier
         )
-        let completedSets = weekly.reduce(0) { $0 + Metrics.completedSets($1.exercises) }
-        let tonnage = weekly.reduce(0.0) { $0 + Metrics.tonnage($1.exercises) }
         let measurements = latestMeasurements(in: store.measures, start: weekStart, end: endExclusive)
         var metrics = [
             AIComputedMetric(key: "workouts_7d", value: Double(weekly.count), unit: "тренировки", sampleCount: weekly.count),
             AIComputedMetric(key: "completed_sets_7d", value: Double(completedSets), unit: "подходы", sampleCount: weekly.count),
             AIComputedMetric(key: "tonnage_7d", value: tonnage, unit: "кг·повторения", sampleCount: weekly.count)
         ]
+        if activeSets > 0 {
+            metrics.append(AIComputedMetric(key: "active_sets", value: Double(activeSets), unit: "подходы", sampleCount: 1))
+        }
+        if activeTonnage > 0 {
+            metrics.append(AIComputedMetric(key: "active_tonnage", value: activeTonnage, unit: "кг·повторения", sampleCount: 1))
+        }
         for measurement in measurements {
             metrics.append(AIComputedMetric(
                 key: measurement.kind == "weight" ? "latest_weight_kg" : "latest_height_cm",
@@ -131,6 +146,7 @@ struct AIInsightsEngine {
         }
         var limitations = ["Итоги рассчитаны приложением только по завершённым тренировкам периода."]
         limitations.append("Сравнительные тренировки не входят в недельные итоги.")
+        if activeSets > 0 { limitations.append("Активная тренировка учитывается отдельно (подходы и тоннаж не входят в недельные итоги).") }
         if weekly.isEmpty { limitations.append("За выбранные дни завершённых тренировок нет.") }
         if measurements.isEmpty { limitations.append("За выбранные дни подходящих измерений нет.") }
         if completedSets == 0 && !weekly.isEmpty { limitations.append("Для подходов без числовых повторений нельзя рассчитать часть показателей.") }
@@ -440,6 +456,6 @@ final class AIInsightsCoordinator {
     }
 
     private static let insightsSystemInstruction = """
-    Проанализируй только переданные приложением локально рассчитанные показатели и сравнительные примеры. Верни JSON с полями schemaVersion (1), summary, observations (элементы с text и evidenceKeys) и limitations. Числа, даты, проценты и новые количественные утверждения в текстовых полях запрещены: числовые факты уже рассчитаны приложением. В evidenceKeys используй только переданные ключи показателей. Не выдумывай наблюдения, если оснований недостаточно. Не давай медицинских назначений, экстремальных диет или рискованных советов подростку; при боли, травме или вопросах лечения советуй обратиться к родителю или опекуну и квалифицированному специалисту.
+    Проанализируй только переданные приложением локально рассчитанные показатели и сравнительные примеры. Верни JSON с полями schemaVersion (1), summary, observations (элементы с text и evidenceKeys) и limitations. Числа, даты, проценты и новые количественные утверждения в текстовых полях запрещены: числовые факты уже рассчитаны приложением. В evidenceKeys используй только переданные ключи показателей. Не выдумывай наблюдения, если оснований недостаточно. Не рекомендуй тренировки через боль, экстремальные нагрузки, опасную прогрессию и медицинские назначения. При боли или травме — к врачу.
     """
 }

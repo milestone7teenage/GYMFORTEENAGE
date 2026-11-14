@@ -132,7 +132,7 @@ final class AICoachSession {
         let requestMessages = previousMessages + [GeminiContent(role: "user", text: promptText)]
         let request = GeminiGenerateContentRequest(
             contents: Array(requestMessages.suffix(10)),
-            systemInstruction: AIConfiguration.systemInstruction,
+            systemInstruction: AIConfiguration.chatSystemInstruction,
             generationConfig: GeminiGenerationConfig(temperature: 0.4, maxOutputTokens: 1200)
         )
         let generation = UUID()

@@ -60,6 +60,26 @@ private struct AIMeasurementContext: Encodable {
     let entries: [Entry]
 }
 
+private struct AIGeneralWorkoutContext: Encodable {
+    struct Entry: Encodable {
+        let date: String
+        let workout: String
+        let exercises: [ExerciseEntry]
+        struct ExerciseEntry: Encodable {
+            let name: String
+            let sets: [Set]
+            struct Set: Encodable {
+                let weight: String
+                let repetitions: String
+                let skipped: Bool
+            }
+        }
+    }
+    let category = "workout_history"
+    let period: String
+    let entries: [Entry]
+}
+
 @MainActor
 struct AIContextBuilder {
     private let calendar: Calendar
@@ -93,21 +113,8 @@ struct AIContextBuilder {
         let period = makePeriod(days: days, endingAt: now)
         if let exercise = matches.first {
             let scope = AIContextScope(category: .exerciseHistory, exerciseID: exercise.id, measurementKind: nil, startDate: period.start, endDate: period.end)
-            let entries = store.records
-                .filter { $0.date >= period.start && $0.date < period.end }
-                .sorted { $0.date > $1.date }
-                .compactMap { record -> AIExerciseContext.Entry? in
-                    guard let log = record.exercises.first(where: { $0.exerciseID == exercise.id || $0.actualID == exercise.id }) else { return nil }
-                    return AIExerciseContext.Entry(
-                        date: dayString(record.date),
-                        workout: record.name,
-                        exercise: exercise.title,
-                        status: log.status,
-                        sets: log.sets.map { .init(weight: $0.weight, repetitions: $0.reps, skipped: $0.skipped) }
-                    )
-                }
-                .prefix(8)
-            let payload = AIExerciseContext(period: period.label, entries: Array(entries))
+            let entries = buildExerciseHistory(for: exercise, store: store, period: period)
+            let payload = AIExerciseContext(period: period.label, entries: entries)
             return selection(scope: scope, payload: payload, category: .exerciseHistory, clarification: nil)
         }
 
@@ -136,12 +143,124 @@ struct AIContextBuilder {
             return build(scope: activeScope, question: normalizedQuestion, store: store, now: now)
         }
 
+        if isGeneralWorkoutQuestion(normalizedQuestion) {
+            let scope = AIContextScope(category: .exerciseHistory, exerciseID: nil, measurementKind: nil, startDate: period.start, endDate: period.end)
+            let entries = buildGeneralWorkoutHistory(store: store, period: period)
+            let payload = AIGeneralWorkoutContext(period: period.label, entries: entries)
+            return selection(scope: scope, payload: payload, category: .exerciseHistory, clarification: nil)
+        }
+
         if normalizedQuestion.contains("недел") || normalizedQuestion.contains("сводк") || normalizedQuestion.contains("обзор") || normalizedQuestion.contains("мой прогресс") || normalizedQuestion.contains("мои трениров") {
             let scope = AIContextScope(category: .weeklyInsights, exerciseID: nil, measurementKind: nil, startDate: period.start, endDate: period.end)
             return AIContextSelection(scope: scope, payloadJSON: nil, categories: [.weeklyInsights], clarification: nil)
         }
 
         return AIContextSelection(scope: nil, payloadJSON: nil, categories: [], clarification: nil)
+    }
+
+    private func buildExerciseHistory(for exercise: Exercise, store: Store, period: (start: Date, end: Date, label: String)) -> [AIExerciseContext.Entry] {
+        var entries: [AIExerciseContext.Entry] = []
+
+        let historyRecords = store.records
+            .filter { $0.date >= period.start && $0.date < period.end }
+            .sorted { $0.date > $1.date }
+
+        for record in historyRecords {
+            guard let log = record.exercises.first(where: { $0.exerciseID == exercise.id || $0.actualID == exercise.id }),
+                  log.status != "skipped" else { continue }
+            let workingSets = log.sets.filter { !$0.skipped && !$0.weight.isEmpty && !$0.reps.isEmpty }
+            guard !workingSets.isEmpty else { continue }
+            entries.append(AIExerciseContext.Entry(
+                date: dayString(record.date),
+                workout: record.name,
+                exercise: exercise.title,
+                status: log.status,
+                sets: workingSets.map { .init(weight: $0.weight, repetitions: $0.reps, skipped: $0.skipped) }
+            ))
+            if entries.count >= 8 { break }
+        }
+
+        if let session = store.session {
+            guard let log = session.exercises.first(where: { $0.exerciseID == exercise.id || $0.actualID == exercise.id }),
+                  log.status != "skipped" else { return Array(entries.prefix(8)) }
+            let workingSets = log.sets.filter { !$0.skipped && !$0.weight.isEmpty && !$0.reps.isEmpty }
+            guard !workingSets.isEmpty else { return Array(entries.prefix(8)) }
+            let todayString = dayString(Date())
+            if !entries.contains(where: { $0.date == todayString && $0.workout == session.workoutID }) {
+                entries.insert(AIExerciseContext.Entry(
+                    date: todayString,
+                    workout: "Активная тренировка",
+                    exercise: exercise.title,
+                    status: log.status,
+                    sets: workingSets.map { .init(weight: $0.weight, repetitions: $0.reps, skipped: $0.skipped) }
+                ), at: 0)
+            }
+        }
+
+        return Array(entries.prefix(8))
+    }
+
+    private func buildGeneralWorkoutHistory(store: Store, period: (start: Date, end: Date, label: String)) -> [AIGeneralWorkoutContext.Entry] {
+        let recentRecords = store.records
+            .filter { $0.date >= period.start && $0.date < period.end }
+            .sorted { $0.date > $1.date }
+            .prefix(5)
+
+        var entries: [AIGeneralWorkoutContext.Entry] = []
+
+        for record in recentRecords {
+            let exerciseEntries = record.exercises.compactMap { log -> AIGeneralWorkoutContext.Entry.ExerciseEntry? in
+                guard log.status != "skipped" else { return nil }
+                let workingSets = log.sets.filter { !$0.skipped && !$0.weight.isEmpty && !$0.reps.isEmpty }
+                guard !workingSets.isEmpty else { return nil }
+                if let exercise = Catalog.all.first(where: { $0.id == log.exerciseID || $0.id == log.actualID }) {
+                    return AIGeneralWorkoutContext.Entry.ExerciseEntry(
+                        name: exercise.title,
+                        sets: workingSets.map { .init(weight: $0.weight, repetitions: $0.reps, skipped: $0.skipped) }
+                    )
+                }
+                return nil
+            }
+            if !exerciseEntries.isEmpty {
+                entries.append(AIGeneralWorkoutContext.Entry(
+                    date: dayString(record.date),
+                    workout: record.name,
+                    exercises: exerciseEntries
+                ))
+            }
+        }
+
+        if let session = store.session {
+            let todayString = dayString(Date())
+            if !entries.contains(where: { $0.date == todayString }) {
+                let exerciseEntries = session.exercises.compactMap { log -> AIGeneralWorkoutContext.Entry.ExerciseEntry? in
+                    guard log.status != "skipped" else { return nil }
+                    let workingSets = log.sets.filter { !$0.skipped && !$0.weight.isEmpty && !$0.reps.isEmpty }
+                    guard !workingSets.isEmpty else { return nil }
+                    if let exercise = Catalog.all.first(where: { $0.id == log.exerciseID || $0.id == log.actualID }) {
+                        return AIGeneralWorkoutContext.Entry.ExerciseEntry(
+                            name: exercise.title,
+                            sets: workingSets.map { .init(weight: $0.weight, repetitions: $0.reps, skipped: $0.skipped) }
+                        )
+                    }
+                    return nil
+                }
+                if !exerciseEntries.isEmpty {
+                    entries.insert(AIGeneralWorkoutContext.Entry(
+                        date: todayString,
+                        workout: "Активная тренировка",
+                        exercises: exerciseEntries
+                    ), at: 0)
+                }
+            }
+        }
+
+        return entries
+    }
+
+    private func isGeneralWorkoutQuestion(_ question: String) -> Bool {
+        let keywords = ["трен", "рабоч", "вес", "прогресс", "нагруз", "план", "программ"]
+        return keywords.contains { question.contains($0) }
     }
 
     private func build(scope: AIContextScope, question: String, store: Store, now: Date) -> AIContextSelection {
@@ -164,21 +283,45 @@ struct AIContextBuilder {
     }
 
     private func matchingExercises(in question: String) -> [Exercise] {
-        let questionWords = Set(question.split(separator: " ").map(String.init))
+        let normalizedTitle = { (exercise: Exercise) -> String in
+            Self.normalize(exercise.title)
+        }
+        let normalizedID = { (exercise: Exercise) -> String in
+            Self.normalize(exercise.id)
+        }
+
         let exactMatches = Catalog.all.filter { exercise in
-            let title = Self.normalize(exercise.title)
-            let id = Self.normalize(exercise.id)
-            let titleWords = Set(title.split(separator: " ").map(String.init))
-            return question.contains(" \(title) ") || question == title || questionWords.contains(id) || titleWords.isSubset(of: questionWords)
+            let title = normalizedTitle(exercise)
+            let id = normalizedID(exercise)
+            let questionLower = question.lowercased()
+            let titleLower = title.lowercased()
+            return questionLower == titleLower
+                || questionLower.contains(" \(titleLower) ")
+                || questionLower.hasPrefix(titleLower + " ")
+                || questionLower.hasSuffix(" " + titleLower)
+                || questionLower.contains(id.lowercased())
         }
         if !exactMatches.isEmpty { return exactMatches }
 
-        let ignoredWords: Set<String> = ["в", "на", "под", "за", "по", "моей", "моем", "моём", "мой", "моя", "мои", "упражнение"]
+        let containsMatches = Catalog.all.filter { exercise in
+            let title = exercise.title
+            return question.localizedCaseInsensitiveContains(title)
+        }
+        if !containsMatches.isEmpty { return containsMatches }
+
+        let questionWords = Set(question.split(separator: " ").map(String.init))
+        let ignoredWords: Set<String> = ["в", "на", "под", "за", "по", "моей", "моем", "моём", "мой", "моя", "мои", "упражнение", "как", "менялась", "менялся", "история", "прогресс", "рабочий", "вес", "подход", "за", "неделю", "месяц", "дня", "дней"]
         let usefulWords = questionWords.subtracting(ignoredWords)
         guard !usefulWords.isEmpty else { return [] }
+
         return Catalog.all.filter { exercise in
-            let titleWords = Set(Self.normalize(exercise.title).split(separator: " ").map(String.init))
-            return !titleWords.isDisjoint(with: usefulWords)
+            let title = normalizedTitle(exercise)
+            let titleWords = Set(title.split(separator: " ").map(String.init))
+            return usefulWords.contains { qWord in
+                titleWords.contains { tWord in
+                    tWord.count >= 4 && qWord.count >= 4 && (tWord.hasPrefix(qWord) || qWord.hasPrefix(tWord))
+                }
+            }
         }
     }
 

@@ -52,17 +52,7 @@ struct AIInsightsSection: View {
                             }
                         }
                     }
-                    HStack(spacing: 8) {
-                        ForEach(insights.computedMetrics, id: \.key) { metric in
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(metricTitle(metric.key)).font(.caption2).foregroundStyle(TeenTheme.muted)
-                                Text("\(metric.value.formatted(.number.precision(.fractionLength(0...1)))) \(metric.unit)")
-                                    .font(.caption.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.75)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(9).background(TeenTheme.raised, in: RoundedRectangle(cornerRadius: 12))
-                        }
-                    }
+                    metricsGrid(insights.computedMetrics)
                     if coordinator.state.isStale {
                         Label("Сохранённая сводка может быть неактуальной", systemImage: "clock.arrow.circlepath")
                             .font(.caption2).foregroundStyle(TeenTheme.muted)
@@ -119,6 +109,30 @@ struct AIInsightsSection: View {
         .sheet(isPresented: $presentsConsent) {
             AIConsentSheet(requiredCategories: coordinator.requiredConsentCategories, initialCategories: consentStore.consentedCategories)
                 .environment(consentStore)
+        }
+    }
+
+    private func metricsGrid(_ metrics: [AIComputedMetric]) -> some View {
+        let columns = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
+        return LazyVGrid(columns: columns, spacing: 8) {
+            ForEach(metrics, id: \.key) { metric in
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(metricTitle(metric.key))
+                        .font(.caption2)
+                        .foregroundStyle(TeenTheme.muted)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .allowsTightening(true)
+                    Text("\(metric.value.formatted(.number.precision(.fractionLength(0...1)))) \(metric.unit)")
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(9)
+                .background(TeenTheme.raised, in: RoundedRectangle(cornerRadius: 12))
+                .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -189,6 +203,8 @@ struct AIInsightsSection: View {
         case "workouts_7d": return "Тренировки · 7 дн."
         case "completed_sets_7d": return "Подходы · 7 дн."
         case "tonnage_7d": return "Тоннаж · 7 дн."
+        case "active_sets": return "Подходы (активная)"
+        case "active_tonnage": return "Тоннаж (активная)"
         case "latest_weight_kg": return "Последний вес"
         case "latest_height_cm": return "Последний рост"
         default: return key
