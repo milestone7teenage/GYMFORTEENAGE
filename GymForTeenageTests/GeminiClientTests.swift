@@ -179,7 +179,7 @@ final class GeminiClientTests: XCTestCase {
 
     func testRejectedErrorExposesServerMessageWithoutLeakingKey() async {
         let body = try! JSONSerialization.data(withJSONObject: [
-            "error": ["code": 400, "message": "Model gemini-3.1-flash-lite not found"]
+            "error": ["code": 400, "message": "Model gemini-3.5-flash-lite not found"]
         ])
         let host = UUID().uuidString + ".test"
         GeminiURLProtocolStub.configure(host: host, replies: [.init(status: 400, data: body)])
@@ -339,7 +339,7 @@ final class GeminiClientTests: XCTestCase {
         maximumResponseBytes: Int = 16_384,
         maximumRetries: Int = 0
     ) -> (GeminiClient, URLSession, URL) {
-        let endpoint = URL(string: "https://\(host)/v1beta/models/gemini-3.1-flash-lite:generateContent")!
+        let endpoint = URL(string: "https://\(host)/v1beta/models/gemini-3.5-flash-lite:generateContent")!
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [GeminiURLProtocolStub.self]
         let session = URLSession(configuration: configuration)

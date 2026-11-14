@@ -70,7 +70,6 @@ struct PremiumHomeView: View {
                 VStack(spacing: 18) {
                     header
                     HStack(spacing: 12) { measureCard("Вес", unit: "кг", kind: "weight", icon: "scalemass.fill", tint: TeenTheme.violet); measureCard("Рост", unit: "см", kind: "height", icon: "ruler.fill", tint: TeenTheme.ice) }
-                    AIInsightsSection()
                     TeenSectionTitle("тренировки", detail: store.session == nil ? "3 программы" : "есть активная")
                     workoutCarousel
                     TeenSectionTitle("вода сегодня", detail: "цель 3 000 мл")

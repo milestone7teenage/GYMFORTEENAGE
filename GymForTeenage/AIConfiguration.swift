@@ -1,7 +1,7 @@
 import Foundation
 
 enum AIConfiguration {
-    static let modelID = "gemini-2.5-flash-lite"
+    static let modelID = "gemini-3.5-flash-lite"
     static let apiBaseURL = URL(string: "https://generativelanguage.googleapis.com/v1beta/models")!
     static let requestTimeout: TimeInterval = 30
     static let resourceTimeout: TimeInterval = 60
