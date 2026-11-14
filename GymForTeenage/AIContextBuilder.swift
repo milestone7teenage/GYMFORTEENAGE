@@ -128,6 +128,13 @@ struct AIContextBuilder {
             return selection(scope: scope, payload: AIWaterContext(period: period.label, entries: entries), category: .waterIntake, clarification: nil)
         }
 
+        if isGeneralWorkoutQuestion(normalizedQuestion) {
+            let scope = AIContextScope(category: .exerciseHistory, exerciseID: nil, measurementKind: nil, startDate: period.start, endDate: period.end)
+            let entries = buildGeneralWorkoutHistory(store: store, period: period)
+            let payload = AIGeneralWorkoutContext(period: period.label, entries: entries)
+            return selection(scope: scope, payload: payload, category: .exerciseHistory, clarification: nil)
+        }
+
         if normalizedQuestion.contains("вес") || normalizedQuestion.contains("рост") || normalizedQuestion.contains("измерен") {
             let kind = normalizedQuestion.contains("рост") ? "height" : "weight"
             let scope = AIContextScope(category: .bodyMeasurements, exerciseID: nil, measurementKind: kind, startDate: period.start, endDate: period.end)
@@ -141,13 +148,6 @@ struct AIContextBuilder {
 
         if isFollowUp(normalizedQuestion), let activeScope {
             return build(scope: activeScope, question: normalizedQuestion, store: store, now: now)
-        }
-
-        if isGeneralWorkoutQuestion(normalizedQuestion) {
-            let scope = AIContextScope(category: .exerciseHistory, exerciseID: nil, measurementKind: nil, startDate: period.start, endDate: period.end)
-            let entries = buildGeneralWorkoutHistory(store: store, period: period)
-            let payload = AIGeneralWorkoutContext(period: period.label, entries: entries)
-            return selection(scope: scope, payload: payload, category: .exerciseHistory, clarification: nil)
         }
 
         if normalizedQuestion.contains("недел") || normalizedQuestion.contains("сводк") || normalizedQuestion.contains("обзор") || normalizedQuestion.contains("мой прогресс") || normalizedQuestion.contains("мои трениров") {
@@ -290,10 +290,11 @@ struct AIContextBuilder {
             Self.normalize(exercise.id)
         }
 
+        let questionLower = question.lowercased()
+
         let exactMatches = Catalog.all.filter { exercise in
             let title = normalizedTitle(exercise)
             let id = normalizedID(exercise)
-            let questionLower = question.lowercased()
             let titleLower = title.lowercased()
             return questionLower == titleLower
                 || questionLower.contains(" \(titleLower) ")
@@ -305,24 +306,82 @@ struct AIContextBuilder {
 
         let containsMatches = Catalog.all.filter { exercise in
             let title = exercise.title
-            return question.localizedCaseInsensitiveContains(title)
+            return questionLower.contains(title.lowercased())
         }
         if !containsMatches.isEmpty { return containsMatches }
 
-        let questionWords = Set(question.split(separator: " ").map(String.init))
-        let ignoredWords: Set<String> = ["в", "на", "под", "за", "по", "моей", "моем", "моём", "мой", "моя", "мои", "упражнение", "как", "менялась", "менялся", "история", "прогресс", "рабочий", "вес", "подход", "за", "неделю", "месяц", "дня", "дней"]
-        let usefulWords = questionWords.subtracting(ignoredWords)
+        let questionWords = question.split(separator: " ").map(String.init)
+        let ignoredWords: Set<String> = ["в", "на", "под", "за", "по", "моей", "моем", "моём", "мой", "моя", "мои", "упражнение", "как", "менялась", "менялся", "история", "прогресс", "рабочий", "вес", "подход", "за", "неделю", "месяц", "дня", "дней", "делать", "делаю", "сколько", "на", "как", "менялась", "менялся"]
+        let usefulWords = questionWords
+            .map { stemRussian($0) }
+            .filter { !ignoredWords.contains($0) && $0.count >= 3 }
         guard !usefulWords.isEmpty else { return [] }
 
         return Catalog.all.filter { exercise in
             let title = normalizedTitle(exercise)
-            let titleWords = Set(title.split(separator: " ").map(String.init))
-            return usefulWords.contains { qWord in
-                titleWords.contains { tWord in
-                    tWord.count >= 4 && qWord.count >= 4 && (tWord.hasPrefix(qWord) || qWord.hasPrefix(tWord))
+            let titleWords = title.split(separator: " ").map { stemRussian(String($0)) }
+            return usefulWords.contains { qStem in
+                titleWords.contains { tStem in
+                    tStem.hasPrefix(qStem) || qStem.hasPrefix(tStem) || tStem == qStem
                 }
             }
         }
+    }
+
+    private func stemRussian(_ word: String) -> String {
+        let lower = word.lowercased()
+        if lower.hasSuffix("ие") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ия") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ье") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ья") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ой") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ей") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ые") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ие") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ию") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ии") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ие") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ая") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ое") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ее") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ой") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ый") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ий") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ую") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ию") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ия") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ям") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ья") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ье") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ие") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ов") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ев") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ам") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ем") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ом") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ах") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ях") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ой") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ей") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ую") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("юю") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ая") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("яя") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ой") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ее") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("ую") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("юю") { return String(lower.dropLast(2)) }
+        if lower.hasSuffix("а") { return String(lower.dropLast(1)) }
+        if lower.hasSuffix("я") { return String(lower.dropLast(1)) }
+        if lower.hasSuffix("о") { return String(lower.dropLast(1)) }
+        if lower.hasSuffix("е") { return String(lower.dropLast(1)) }
+        if lower.hasSuffix("и") { return String(lower.dropLast(1)) }
+        if lower.hasSuffix("ы") { return String(lower.dropLast(1)) }
+        if lower.hasSuffix("у") { return String(lower.dropLast(1)) }
+        if lower.hasSuffix("ю") { return String(lower.dropLast(1)) }
+        if lower.hasSuffix("ь") { return String(lower.dropLast(1)) }
+        if lower.hasSuffix("ъ") { return String(lower.dropLast(1)) }
+        return lower
     }
 
     private func selection<T: Encodable>(scope: AIContextScope, payload: T, category: AIDataCategory, clarification: String?) -> AIContextSelection {
