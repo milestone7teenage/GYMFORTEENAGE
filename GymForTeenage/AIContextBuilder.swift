@@ -365,7 +365,8 @@ if hasWaterKeyword {
             let titleWords = title.split(separator: " ").map { stemRussian(String($0)) }
             return usefulWords.contains { qStem in
                 titleWords.contains { tStem in
-                    tStem.hasPrefix(qStem) || qStem.hasPrefix(tStem) || tStem == qStem ||
+                    guard tStem.count >= 3 else { return false }
+                    return tStem.hasPrefix(qStem) || qStem.hasPrefix(tStem) || tStem == qStem ||
                     (tStem.count <= 4 && qStem.count <= 4 && levenshteinDistance(tStem, qStem) <= 1)
                 }
             }
