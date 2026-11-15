@@ -97,7 +97,7 @@ jobs:
 
           print(f"App host bundle identifier: {bundle_id}")
           print(f"App host application identifier: {app_identifier}")
-PY
+          PY
       - name: Run XCTest suite
         shell: bash
         run: |
