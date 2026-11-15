@@ -14,12 +14,12 @@ jobs:
         run: plutil -lint GymForTeenage.xcodeproj/project.pbxproj
       - name: Confirm Xcode can read project and scheme
         run: xcodebuild -list -project GymForTeenage.xcodeproj
-      - name: Build XCTest bundle with Simulator signing
+- name: Build XCTest bundle with Simulator signing
         run: |
           set -euo pipefail
           echo "XCTEST_BUILD_STARTED_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
-          xcodebuild build-for-testing -project GymForTeenage.xcodeproj -scheme GymForTeenage -destination 'platform=iOS Simulator,name=iPhone 16,arch=arm64' -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- AD_HOC_CODE_SIGNING_ALLOWED=YES
-      - name: Verify XCTest host and Keychain entitlements
+          xcodebuild build-for-testing -project GymForTeenage.xcodeproj -scheme GymForTeenage -destination 'generic/platform=iOS Simulator' -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- AD_HOC_CODE_SIGNING_ALLOWED=YES
+- name: Verify XCTest host and Keychain entitlements
         shell: bash
         run: |
           set -euo pipefail
@@ -28,7 +28,7 @@ jobs:
           EXPECTED_TEST_HOST="$PWD/$APP_EXECUTABLE"
           test -x "$APP_EXECUTABLE"
 
-          BUILD_SETTINGS="$(xcodebuild -showBuildSettings -project GymForTeenage.xcodeproj -scheme GymForTeenage -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 16,arch=arm64' -derivedDataPath build/DerivedData test)"
+          BUILD_SETTINGS="$(xcodebuild -showBuildSettings -project GymForTeenage.xcodeproj -scheme GymForTeenage -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/DerivedData test)"
           TEST_TARGET_SETTINGS="$(printf '%s\n' "$BUILD_SETTINGS" | awk '
             /^Build settings for action .* and target GymForTeenageTests:/ { in_test_target = 1; next }
             /^Build settings for action .* and target / { if (in_test_target) exit; in_test_target = 0 }
@@ -98,10 +98,19 @@ jobs:
           print(f"App host bundle identifier: {bundle_id}")
           print(f"App host application identifier: {app_identifier}")
           PY
-      - name: Run XCTest suite
-        run: xcodebuild test-without-building -project GymForTeenage.xcodeproj -scheme GymForTeenage -destination 'platform=iOS Simulator,name=iPhone 16,arch=arm64' -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- AD_HOC_CODE_SIGNING_ALLOWED=YES
-      - name: Xcode static analysis
-        run: xcodebuild analyze -project GymForTeenage.xcodeproj -scheme GymForTeenage -destination 'platform=iOS Simulator,name=iPhone 16' CODE_SIGNING_ALLOWED=NO
+- name: Run XCTest suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          SIM_ID=$(xcrun simctl list devices available iPhone -j | python3 -c "import sys,json; devs=[d['udid'] for r in json.load(sys.stdin)['devices'].values() for d in r if d.get('isAvailable') and 'iPhone' in d.get('name','')]; print(devs[0] if devs else '')")
+          if [ -z "$SIM_ID" ]; then
+            RUNTIME=$(xcrun simctl list runtimes iOS -j | python3 -c "import sys,json; r=[x['identifier'] for x in json.load(sys.stdin)['runtimes'] if x.get('isAvailable')]; print(r[-1])")
+            DEV_TYPE=$(xcrun simctl list devicetypes iPhone -j | python3 -c "import sys,json; d=[x['identifier'] for x in json.load(sys.stdin)['devicetypes'] if 'iPhone' in x.get('name','')]; print(d[-1])")
+            SIM_ID=$(xcrun simctl create "CI-iPhone" "$DEV_TYPE" "$RUNTIME")
+          fi
+          xcodebuild test-without-building -project GymForTeenage.xcodeproj -scheme GymForTeenage -destination "id=$SIM_ID" -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- AD_HOC_CODE_SIGNING_ALLOWED=YES
+- name: Xcode static analysis
+        run: xcodebuild analyze -project GymForTeenage.xcodeproj -scheme GymForTeenage -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
       - name: Archive without personal signing
         run: xcodebuild archive -project GymForTeenage.xcodeproj -scheme GymForTeenage -configuration Release -sdk iphoneos -archivePath build/GymForTeenage.xcarchive CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
       - name: Package and inspect unsigned IPA
