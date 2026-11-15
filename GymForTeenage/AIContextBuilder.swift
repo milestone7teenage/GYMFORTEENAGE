@@ -134,11 +134,10 @@ struct AIContextBuilder {
         }
 
 // 2. Water/hydration questions (contains water-related keywords by token boundaries)
-let questionLower = question.lowercased()
-let questionTokens = questionLower.split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+let questionTokens = normalizedQuestion.split(separator: " ")
 let waterKeywords = ["вода", "воды", "воду", "водой", "воде", "пью", "пил", "пила", "пить", "выпил", "пит", "мл", "литр", "литра", "литров", "гидратация", "гидратации"]
 let hasWaterKeyword = questionTokens.contains { token in
-    let tokenStr = String(token).lowercased()
+    let tokenStr = String(token)
     return waterKeywords.contains { kw in tokenStr == kw || tokenStr.hasPrefix(kw) || tokenStr.hasSuffix(kw) }
 }
 if hasWaterKeyword {
