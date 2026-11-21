@@ -311,11 +311,11 @@ final class AIInsightsCoordinator {
             if previousInsights != nil { try? cache.clear() }
             state = isAIEnabled
                 ? .empty(.noData, message: "За последние семь дней нет завершённых тренировок для анализа.")
-                : .empty(.disabled, message: "Включи AI-помощника в настройках, чтобы обновить Insights.")
+                : .empty(.disabled, message: "Включи Teenage Coach в настройках, чтобы обновить Insights.")
             return
         }
         guard isAIEnabled else {
-            state = AIInsightsViewState(availability: .disabled, insights: previousInsights, isStale: previousInsights != nil && !isCurrent, message: "Включи AI-помощника в настройках, чтобы обновить Insights.")
+            state = AIInsightsViewState(availability: .disabled, insights: previousInsights, isStale: previousInsights != nil && !isCurrent, message: "Включи Teenage Coach в настройках, чтобы обновить Insights.")
             return
         }
         if isCurrent, let previousInsights {
@@ -329,7 +329,7 @@ final class AIInsightsCoordinator {
                 availability: hasKey ? (hasConsent ? .ready : .consentRequired) : .missingKey,
                 insights: previousInsights,
                 isStale: previousInsights != nil,
-                message: !hasKey ? "Сохрани API-ключ Gemini в настройках, чтобы запросить Insights." : (hasConsent ? "Сводка не обновляется автоматически. Нажми кнопку, когда захочешь отправить показатели в Google Gemini." : "Перед анализом нужно отдельно подтвердить отправку недельных показателей в Google Gemini.")
+                message: !hasKey ? "Сохрани API-ключ в настройках, чтобы запросить Insights." : (hasConsent ? "Сводка не обновляется автоматически. Нажми кнопку, когда захочешь отправить показатели." : "Перед анализом нужно отдельно подтвердить отправку недельных показателей.")
             )
             return
         }
@@ -337,11 +337,11 @@ final class AIInsightsCoordinator {
             return
         }
         guard let apiKey, !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            state = AIInsightsViewState(availability: .missingKey, insights: previousInsights, isStale: previousInsights != nil, message: "Сохрани API-ключ Gemini в настройках.")
+            state = AIInsightsViewState(availability: .missingKey, insights: previousInsights, isStale: previousInsights != nil, message: "Сохрани API-ключ в настройках.")
             return
         }
         guard requiredConsentCategories.isSubset(of: consentedCategories) else {
-            state = AIInsightsViewState(availability: .consentRequired, insights: previousInsights, isStale: previousInsights != nil, message: "Перед анализом нужно разрешить отправку недельных показателей в Google Gemini.")
+            state = AIInsightsViewState(availability: .consentRequired, insights: previousInsights, isStale: previousInsights != nil, message: "Перед анализом нужно разрешить отправку недельных показателей.")
             return
         }
 
@@ -412,7 +412,8 @@ final class AIInsightsCoordinator {
             state = AIInsightsViewState(availability: .failed, insights: previousInsights, isStale: previousInsights != nil, message: error.userMessage)
         } catch {
             guard requestGeneration == generation else { return }
-            state = AIInsightsViewState(availability: .failed, insights: previousInsights, isStale: previousInsights != nil, message: "Gemini вернул данные, которые приложение не смогло проверить.")
+            let providerName = AIConfiguration.currentProvider == .openRouter ? "OpenRouter" : "Gemini"
+            state = AIInsightsViewState(availability: .failed, insights: previousInsights, isStale: previousInsights != nil, message: "\(providerName) вернул данные, которые приложение не смогло проверить.")
         }
     }
 

@@ -1,8 +1,47 @@
 import Foundation
 
+enum AIProvider: CaseIterable {
+    case openRouter
+    case googleGemini
+    
+    var name: String {
+        switch self {
+        case .openRouter: return "OpenRouter (Бесплатно / без VPN)"
+        case .googleGemini: return "Google Gemini"
+        }
+    }
+    
+    var url: URL {
+        switch self {
+        case .openRouter: return URL(string: "https://openrouter.ai/api/v1/chat/completions")!
+        case .googleGemini: return URL(string: "https://generativelanguage.googleapis.com/v1beta/models")!
+        }
+    }
+    
+    var defaultModel: String {
+        switch self {
+        case .openRouter: return "openrouter/free"
+        case .googleGemini: return "gemini-3.5-flash-lite"
+        }
+    }
+    
+    var requiresAuthorizationHeader: Bool {
+        return self == .openRouter
+    }
+    
+    var requiresRefererAndTitleHeaders: Bool {
+        return self == .openRouter
+    }
+}
+
 enum AIConfiguration {
-    static let modelID = "gemini-3.5-flash-lite"
-    static let apiBaseURL = URL(string: "https://generativelanguage.googleapis.com/v1beta/models")!
+    static var currentProvider: AIProvider = .googleGemini {
+        didSet {
+            currentModelID = currentProvider.defaultModel
+        }
+    }
+    static var currentModelID = "gemini-3.5-flash-lite"
+    
     static let requestTimeout: TimeInterval = 30
     static let resourceTimeout: TimeInterval = 60
     static let maximumAPIKeyLength = 4096
@@ -20,6 +59,10 @@ enum AIConfiguration {
     """
 
     static var generateContentURL: URL {
-        apiBaseURL.appendingPathComponent("\(modelID):generateContent")
+        currentProvider.url.appendingPathComponent(currentProvider == .googleGemini ? "\(currentModelID):generateContent" : "")
+    }
+    
+    static var chatContentURL: URL {
+        generateContentURL
     }
 }

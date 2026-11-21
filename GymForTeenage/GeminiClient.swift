@@ -189,7 +189,10 @@ actor GeminiClient: GeminiGenerating {
         maximumRetries: Int,
         retryBaseDelay: TimeInterval,
         maximumRetryDelay: TimeInterval,
-        defaultRateLimitDelay: TimeInterval
+        defaultRateLimitDelay: TimeInterval,
+        provider: AIProvider = .googleGemini,
+        referer: String? = nil,
+        title: String? = nil
     ) async throws -> String {
         var retryIndex = 0
         while true {
@@ -203,7 +206,10 @@ actor GeminiClient: GeminiGenerating {
                     timeout: timeout,
                     resourceTimeout: resourceTimeout,
                     responseLimit: responseLimit,
-                    defaultRateLimitDelay: defaultRateLimitDelay
+                    defaultRateLimitDelay: defaultRateLimitDelay,
+                    provider: currentProvider,
+                    referer: referer,
+                    title: title
                 )
             } catch let error as GeminiClientError {
                 guard retryIndex < maximumRetries, isTransient(error) else { throw error }
@@ -226,13 +232,19 @@ actor GeminiClient: GeminiGenerating {
         timeout: TimeInterval,
         resourceTimeout: TimeInterval,
         responseLimit: Int,
-        defaultRateLimitDelay: TimeInterval
+        defaultRateLimitDelay: TimeInterval,
+        provider: AIProvider = .googleGemini,
+        referer: String? = nil,
+        title: String? = nil
     ) async throws -> String {
         let urlRequest = GeminiURLRequestFactory.make(
             body: body,
             apiKey: apiKey,
             endpoint: endpoint,
-            timeoutInterval: min(timeout, resourceTimeout)
+            timeoutInterval: min(timeout, resourceTimeout),
+            provider: provider,
+            referer: referer,
+            title: title
         )
 
         var data = Data()
@@ -331,13 +343,28 @@ actor GeminiClient: GeminiGenerating {
 }
 
 enum GeminiURLRequestFactory {
-    static func make(body: Data, apiKey: String, endpoint: URL, timeoutInterval: TimeInterval) -> URLRequest {
+    static func make(body: Data, apiKey: String, endpoint: URL, timeoutInterval: TimeInterval, provider: AIProvider = .googleGemini, referer: String? = nil, title: String? = nil) -> URLRequest {
         var request = URLRequest(url: endpoint, timeoutInterval: timeoutInterval)
         request.httpMethod = "POST"
         request.httpBody = body
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
+        
+        if provider.requiresAuthorizationHeader {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        } else {
+            request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
+        }
+        
+        if provider.requiresRefererAndTitleHeaders {
+            if let referer = referer {
+                request.setValue(referer, forHTTPHeaderField: "HTTP-Referer")
+            }
+            if let title = title {
+                request.setValue(title, forHTTPHeaderField: "X-Title")
+            }
+        }
+        
         return request
     }
 }

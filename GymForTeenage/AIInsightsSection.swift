@@ -16,7 +16,7 @@ struct AIInsightsSection: View {
                 HStack(spacing: 10) {
                     Image(systemName: "sparkles").foregroundStyle(TeenTheme.violet).font(.title3)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("AI Coach").font(.headline)
+                        Text("Teenage Coach").font(.headline)
                         Text("Insights по тренировкам").font(.caption).foregroundStyle(TeenTheme.muted)
                     }
                     Spacer()
@@ -26,7 +26,7 @@ struct AIInsightsSection: View {
                             .frame(width: 36, height: 36).background(TeenTheme.raised, in: Circle())
                     }
                     .buttonStyle(TeenPressStyle())
-                    .accessibilityLabel("Открыть чат AI Coach")
+                    .accessibilityLabel("Открыть чат Teenage Coach")
                     if coordinator.state.availability == .loading {
                         ProgressView().tint(TeenTheme.lime)
                     }
@@ -140,15 +140,15 @@ struct AIInsightsSection: View {
         Group {
             switch coordinator.state.availability {
             case .disabled:
-                Text("AI-помощник выключен. Его можно включить в настройках.")
+                Text("Teenage Coach выключен. Его можно включить в настройках.")
             case .missingKey:
-                Text("Сначала добавь API-ключ Gemini в настройках.")
+                Text("Сначала добавь API-ключ в настройках.")
             case .consentRequired:
-                Text("Перед анализом можно выбрать, какие показатели разрешено отправлять Google Gemini.")
+                Text("Перед анализом можно выбрать, какие показатели разрешено отправлять.")
             case .loading:
                 Text("Готовим сводку из локально рассчитанных показателей…")
             case .ready:
-                Text("Показатели рассчитаны приложением; текст — пояснение AI Coach.")
+                Text("Показатели рассчитаны приложением; текст — пояснение Teenage Coach.")
             case .noData:
                 Text("Заверши тренировку, чтобы появилась недельная сводка.")
             case .failed:

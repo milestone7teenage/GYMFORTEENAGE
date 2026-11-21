@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 
 actor AIRequestCoordinator: GeminiGenerating {
-    static let shared = AIRequestCoordinator(client: GeminiClient.shared)
+    static let shared = AIRequestCoordinator()
 
     private struct InsightFlight {
         let id: UUID
@@ -10,12 +10,24 @@ actor AIRequestCoordinator: GeminiGenerating {
         let task: Task<String, Error>
     }
 
-    private let client: any GeminiGenerating
+    private let geminiClient: GeminiGenerating
+    private let openRouterClient: GeminiGenerating
     private var insightFlight: InsightFlight?
     private var chatIsActive = false
 
-    init(client: any GeminiGenerating = GeminiClient.shared) {
-        self.client = client
+    init(
+        geminiClient: GeminiGenerating = GeminiClient.shared,
+        openRouterClient: GeminiGenerating = OpenRouterClient.shared
+    ) {
+        self.geminiClient = geminiClient
+        self.openRouterClient = openRouterClient
+    }
+
+    private func getClient(for provider: AIProvider) -> GeminiGenerating {
+        switch provider {
+        case .openRouter: return openRouterClient
+        case .googleGemini: return geminiClient
+        }
     }
 
     func generateContent(_ request: GeminiGenerateContentRequest, apiKey: String) async throws -> String {
@@ -31,6 +43,7 @@ actor AIRequestCoordinator: GeminiGenerating {
         displaced?.cancel()
         if let displaced { _ = try? await displaced.value }
         guard !Task.isCancelled else { throw GeminiClientError.cancelled }
+        let client = getClient(for: AIConfiguration.currentProvider)
         return try await client.generateContent(request, apiKey: apiKey)
     }
 
@@ -48,7 +61,7 @@ actor AIRequestCoordinator: GeminiGenerating {
         guard !chatIsActive else { throw GeminiClientError.cancelled }
 
         let id = UUID()
-        let client = self.client
+        let client = getClient(for: AIConfiguration.currentProvider)
         let task = Task { try await client.generateContent(request, apiKey: apiKey) }
         insightFlight = InsightFlight(id: id, signature: signature, task: task)
         defer {

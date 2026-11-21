@@ -26,7 +26,7 @@ struct AIChatView: View {
                             if session.isSending {
                                 HStack {
                                     ProgressView().tint(TeenTheme.violet)
-                                    Text("AI Coach отвечает…").font(.caption).foregroundStyle(TeenTheme.muted)
+                                    Text("Teenage Coach отвечает…").font(.caption).foregroundStyle(TeenTheme.muted)
                                     Spacer()
                                 }.padding(.horizontal, 16).id("loading")
                             }
@@ -67,7 +67,7 @@ struct AIChatView: View {
                         .padding(.horizontal, 13).padding(.vertical, 10)
                         .background(TeenTheme.raised, in: RoundedRectangle(cornerRadius: 18))
                         .disabled(session.isSending)
-                        .accessibilityLabel("Сообщение AI Coach")
+                        .accessibilityLabel("Сообщение Teenage Coach")
                     Button(action: send) {
                         Image(systemName: "arrow.up")
                             .font(.headline).foregroundStyle(TeenTheme.ink)
@@ -75,13 +75,13 @@ struct AIChatView: View {
                     }
                     .buttonStyle(TeenPressStyle())
                     .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || session.isSending)
-                    .accessibilityLabel("Отправить сообщение")
+                    .accessibilityLabel("Отправить сообщение Teenage Coach")
                 }
                 .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 12)
                 .background(TeenTheme.ink)
             }
             .background(TeenTheme.ink.ignoresSafeArea())
-            .navigationTitle("AI Coach")
+            .navigationTitle("Teenage Coach")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -102,16 +102,7 @@ struct AIChatView: View {
     }
 
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Image(systemName: "sparkles").foregroundStyle(TeenTheme.violet).font(.title2)
-            Text("Новый чат").font(.headline)
-            Text("Можно спросить про упражнения, тренировочную историю или общие принципы занятий. Начни с одного вопроса.")
-                .font(.subheadline).foregroundStyle(TeenTheme.muted)
-            Text("Чат хранится только пока открыт этот экран.")
-                .font(.caption).foregroundStyle(TeenTheme.muted)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16).background(TeenTheme.raised, in: RoundedRectangle(cornerRadius: 18))
+        EmptyView()
     }
 
     private func messageBubble(_ message: AIChatMessage) -> some View {
@@ -126,15 +117,15 @@ struct AIChatView: View {
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(message.role == .user ? "Ты: \(message.text)" : "AI Coach: \(message.text)")
+        .accessibilityLabel("Teenage Coach: \(message.text)")
     }
 
     private var statusMessage: String? {
         switch session.availability {
         case .idle: return nil
-        case .disabled: return "Включи AI-помощника в настройках, чтобы начать чат."
-        case .missingKey: return "Добавь API-ключ Gemini в настройках."
-        case .consentRequired: return "Перед отправкой сообщения и выбранных данных нужно отдельно подтвердить передачу Google Gemini."
+        case .disabled: return "Включи Teenage Coach в настройках, чтобы начать чат."
+        case .missingKey: return "Добавь API-ключ в настройках."
+        case .consentRequired: return "Перед отправкой сообщения и выбранных данных нужно отдельно подтвердить передачу данных."
         case .loading: return nil
         case .failed(let message): return message
         }

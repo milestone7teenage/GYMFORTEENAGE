@@ -160,7 +160,7 @@ final class AICoachSession {
                   response.count <= 4_000,
                   !response.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) && $0.value != 10 && $0.value != 9 }) else {
                 canRetry = true
-                availability = .failed("Gemini вернул пустой или слишком большой ответ. Попробуй задать вопрос иначе.")
+                availability = .failed("AI Coach вернул пустой или слишком большой ответ. Попробуй задать вопрос иначе.")
                 return true
             }
             messages.append(AIChatMessage(role: .assistant, text: response.trimmingCharacters(in: .whitespacesAndNewlines)))

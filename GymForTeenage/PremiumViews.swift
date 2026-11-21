@@ -70,11 +70,8 @@ struct PremiumHomeView: View {
                 VStack(spacing: 18) {
                     header
                     HStack(spacing: 12) { measureCard("Вес", unit: "кг", kind: "weight", icon: "scalemass.fill", tint: TeenTheme.violet); measureCard("Рост", unit: "см", kind: "height", icon: "ruler.fill", tint: TeenTheme.ice) }
-                    TeenSectionTitle("тренировки")
                     workoutCarousel
-                    TeenSectionTitle("вода сегодня")
                     waterCard
-                    TeenSectionTitle("креатин")
                     creatineCard
                 }
                 .padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 112)
@@ -175,9 +172,16 @@ struct PremiumHomeView: View {
     }
     private var waterCard: some View {
         TeenCard {
-            VStack(spacing: 14) {
-                Text("Вода сегодня").font(.headline).multilineTextAlignment(.center)
-                ZStack { Circle().stroke(TeenTheme.raised, lineWidth: 10); Circle().trim(from: 0, to: waterProgress).stroke(TeenTheme.ice, style: StrokeStyle(lineWidth: 10, lineCap: .round)).rotationEffect(.degrees(-90)).animation(.easeInOut(duration: 0.35), value: waterProgress); VStack(spacing: 1) { Text("\(store.todayML)").font(.system(.title3, design: .rounded, weight: .bold)).monospacedDigit(); Text("мл").font(.caption2).foregroundStyle(TeenTheme.muted) } }.frame(width: 90, height: 90)
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle().stroke(TeenTheme.raised, lineWidth: 10)
+                    Circle().trim(from: 0, to: waterProgress).stroke(TeenTheme.ice, style: StrokeStyle(lineWidth: 10, lineCap: .round)).rotationEffect(.degrees(-90)).animation(.easeInOut(duration: 0.35), value: waterProgress)
+                    VStack(spacing: 1) {
+                        Text("\(store.todayML)").font(.system(.title3, design: .rounded, weight: .bold)).monospacedDigit()
+                        Text("мл").font(.caption2).foregroundStyle(TeenTheme.muted)
+                    }
+                }.frame(width: 80, height: 80)
+                Spacer()
                 Button { store.addWater() } label: { Label("+ 200 мл", systemImage: "drop.fill").font(.subheadline.weight(.bold)).foregroundStyle(TeenTheme.ink).padding(.horizontal, 16).padding(.vertical, 10).background(TeenTheme.ice, in: Capsule()) }.disabled(store.todayML >= 3000).buttonStyle(TeenPressStyle())
             }
         }
@@ -261,7 +265,7 @@ struct PremiumExerciseView: View {
     private let minimumDrag: CGFloat = 55
     var body: some View {
         let session = store.current(workout); let entry = session.exercises[index]; let exercise = Catalog.e(entry.actualID)
-        ScrollView { VStack(spacing: 16) { hero(exercise, session: session); setCard(entry); actionRow(entry); notes(entry); history(entry); Button(index + 1 < session.exercises.count ? "Сохранить и далее" : "К списку") { advance(session) }.font(.headline).frame(maxWidth: .infinity).padding(.vertical, 15).foregroundStyle(TeenTheme.ink).background(TeenTheme.lime, in: Capsule()).buttonStyle(TeenPressStyle()); Button(entry.status == "skipped" ? "Вернуть упражнение" : "Пропустить упражнение") { if entry.status == "skipped" { recover() } else { skip() } }.font(.caption.weight(.medium)).foregroundStyle(entry.status == "skipped" ? TeenTheme.lime : .red) }.padding(20).padding(.bottom, 120) }
+        ScrollView { VStack(spacing: 16) { hero(exercise, session: session); setCard(entry); actionRow(entry); history(entry); notes(entry); Button(index + 1 < session.exercises.count ? "Сохранить и далее" : "К списку") { advance(session) }.font(.headline).frame(maxWidth: .infinity).padding(.vertical, 15).foregroundStyle(TeenTheme.ink).background(TeenTheme.lime, in: Capsule()).buttonStyle(TeenPressStyle()); Button(entry.status == "skipped" ? "Вернуть упражнение" : "Пропустить упражнение") { if entry.status == "skipped" { recover() } else { skip() } }.font(.caption.weight(.medium)).foregroundStyle(entry.status == "skipped" ? TeenTheme.lime : .red) }.padding(20).padding(.bottom, 120) }
             .background(TeenTheme.ink)
             .navigationBarTitleDisplayMode(.inline)
             .offset(x: dragOffset)
@@ -312,20 +316,61 @@ struct PremiumExerciseView: View {
     }
     private func hero(_ exercise: Exercise, session: Session) -> some View { TeenCard { VStack(spacing: 12) { ZStack { Circle().stroke(TeenTheme.raised, lineWidth: 6); Circle().trim(from: 0, to: Double(index + 1) / Double(session.exercises.count)).stroke(TeenTheme.ice, style: StrokeStyle(lineWidth: 6, lineCap: .round)).rotationEffect(.degrees(-90)); Image(uiImage: exerciseUIImage(exercise.image)).resizable().scaledToFill().frame(width: 92, height: 92).clipShape(Circle()) }.frame(width: 108, height: 108); Text(exercise.title.uppercased()).font(.headline).multilineTextAlignment(.center); Text("Тренировка · упражнение \(index + 1)").font(.caption).foregroundStyle(TeenTheme.muted) } .frame(maxWidth: .infinity) } }
     private func setCard(_ entry: ExerciseLog) -> some View { TeenCard { VStack(alignment: .leading, spacing: 12) { TeenSectionTitle("подходы", detail: "вес · повторы"); ForEach(entry.sets.indices, id: \.self) { row in setRow(entry.sets[row], row: row) }; HStack { Button { store.mutate { $0.exercises[index].sets.append(SetLog()) } } label: { Label("Подход", systemImage: "plus").font(.subheadline.weight(.bold)).foregroundStyle(TeenTheme.lime) }; Spacer(); if entry.sets.count > 2 { Button("Удалить") { store.mutate { $0.exercises[index].sets.removeLast() } }.foregroundStyle(.red).font(.caption) } } } } }
-    private func setRow(_ set: SetLog, row: Int) -> some View { HStack(spacing: 8) { Text("\(row + 1)").font(.caption.weight(.bold)).frame(width: 30, height: 30).background(set.skipped ? Color.red.opacity(0.16) : TeenTheme.lime.opacity(0.12), in: Circle()).foregroundStyle(set.skipped ? .red : TeenTheme.lime); TextField("кг", text: Binding(get: { set.weight }, set: { value in store.mutate { s in s.exercises[index].sets[row].weight = value; if row == 0 && s.exercises[index].sets.count > 1 && s.exercises[index].sets[1].weight.isEmpty { s.exercises[index].sets[1].weight = value } } })).keyboardType(.decimalPad).multilineTextAlignment(.center).padding(10).background(TeenTheme.raised, in: Capsule()); TextField("раз", text: Binding(get: { set.reps }, set: { value in store.mutate { $0.exercises[index].sets[row].reps = value } })).keyboardType(.numberPad).multilineTextAlignment(.center).padding(10).background(TeenTheme.raised, in: Capsule()); Button { store.mutate { $0.exercises[index].sets[row].skipped.toggle() } } label: { Image(systemName: set.skipped ? "xmark" : "checkmark").font(.caption.weight(.bold)).frame(width: 34, height: 34).foregroundStyle(set.skipped ? .red : TeenTheme.lime).background((set.skipped ? Color.red : TeenTheme.lime).opacity(0.14), in: Circle()) } } }
+    private func setRow(_ set: SetLog, row: Int) -> some View {
+        let isLast = row == 0
+        return HStack(spacing: 8) {
+            Text("\(row + 1)").font(.caption.weight(.bold)).frame(width: 30, height: 30).background(set.skipped ? Color.red.opacity(0.16) : TeenTheme.lime.opacity(0.12), in: Circle()).foregroundStyle(set.skipped ? .red : TeenTheme.lime)
+            TextField("кг", text: Binding(get: { set.weight }, set: { value in store.mutate { s in s.exercises[index].sets[row].weight = value } })).keyboardType(.decimalPad).multilineTextAlignment(.center).padding(10).background(TeenTheme.raised, in: Capsule()).contentShape(Rectangle())
+            TextField("раз", text: Binding(get: { set.reps }, set: { value in store.mutate { $0.exercises[index].sets[row].reps = value } })).keyboardType(.numberPad).multilineTextAlignment(.center).padding(10).background(TeenTheme.raised, in: Capsule()).contentShape(Rectangle())
+            if set.sets.count > 1 {
+                Button { store.mutate { $0.exercises[index].sets.remove(at: row) } } label: {
+                    Image(systemName: "minus.circle.fill").font(.caption.weight(.bold)).frame(width: 34, height: 34).foregroundStyle(.red).background(Color.red.opacity(0.14), in: Circle())
+                }.buttonStyle(PlainButtonStyle())
+            } else if set.skipped {
+                Button { store.mutate { $0.exercises[index].sets[row].skipped.toggle() } } label: {
+                    Image(systemName: set.skipped ? "xmark" : "checkmark").font(.caption.weight(.bold)).frame(width: 34, height: 34).foregroundStyle(set.skipped ? .red : TeenTheme.lime).background((set.skipped ? Color.red : TeenTheme.lime).opacity(0.14), in: Circle())
+                }.buttonStyle(PlainButtonStyle())
+            }
+        }
+    }
     private func actionRow(_ entry: ExerciseLog) -> some View { HStack(spacing: 10) { Button { replace = true } label: { action("Заменить", icon: "arrow.triangle.2.circlepath") }; NavigationLink { PremiumHistoryView(exerciseID: entry.exerciseID) } label: { action("История", icon: "clock.arrow.circlepath") } } }
     private func action(_ text: String, icon: String) -> some View { VStack(spacing: 6) { Image(systemName: icon); Text(text).font(.caption2.weight(.semibold)) }.foregroundStyle(.white).frame(maxWidth: .infinity).padding(.vertical, 12).background(TeenTheme.surface, in: RoundedRectangle(cornerRadius: 16)).overlay(RoundedRectangle(cornerRadius: 16).stroke(TeenTheme.line)) }
-    private func notes(_ entry: ExerciseLog) -> some View { TeenCard { VStack(alignment: .leading, spacing: 8) { Text("Техника выполнения").font(.headline); TextEditor(text: Binding(get: { store.instructions[entry.exerciseID] ?? TechniqueGuide.instruction(for: entry.exerciseID) }, set: { store.instructions[entry.exerciseID] = $0; store.save() })).scrollContentBackground(.hidden).frame(minHeight: 150).padding(6).background(TeenTheme.raised, in: RoundedRectangle(cornerRadius: 14)); Text("Подсказка для безопасного выполнения. Выбирай комфортный вес и диапазон движения.").font(.caption2).foregroundStyle(TeenTheme.muted) } } }
+    private func notes(_ entry: ExerciseLog) -> some View {
+        @State private var isExpanded = false
+        return TeenCard { VStack(alignment: .leading, spacing: 4) {
+            Button {
+                isExpanded.toggle()
+            } label: {
+                HStack {
+                    Text("Техника выполнения").font(.subheadline.weight(.semibold))
+                    Spacer()
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down").font(.caption).foregroundStyle(TeenTheme.muted)
+                }
+            }
+            if isExpanded {
+                TextEditor(text: Binding(get: { store.instructions[entry.exerciseID] ?? TechniqueGuide.instruction(for: entry.exerciseID) }, set: { store.instructions[entry.exerciseID] = $0; store.save() })).scrollContentBackground(.hidden).frame(minHeight: 100).padding(6).background(TeenTheme.raised, in: RoundedRectangle(cornerRadius: 10))
+                Text("Подсказка для безопасного выполнения. Выбирай комфортный вес и диапазон движения.").font(.caption2).foregroundStyle(TeenTheme.muted)
+            }
+        } }
+    }
     private func history(_ entry: ExerciseLog) -> some View {
+        @State private var isExpanded = true
         let latest = store.exerciseHistory(for: entry.exerciseID).first
         return TeenCard {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Предыдущая тренировка").font(.headline)
-                    Spacer()
-                    if let latest { Text(latest.record.date.ruLong).font(.caption2).foregroundStyle(TeenTheme.muted) }
+            VStack(alignment: .leading, spacing: 6) {
+                Button {
+                    isExpanded.toggle()
+                } label: {
+                    HStack {
+                        Text("Предыдущая тренировка").font(.subheadline.weight(.semibold))
+                        Spacer()
+                        if let latest {
+                            Text(latest.record.date.ruLong).font(.caption2).foregroundStyle(TeenTheme.muted)
+                        }
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down").font(.caption).foregroundStyle(TeenTheme.muted)
+                    }
                 }
-                if let latest {
+                if isExpanded, let latest {
                     ForEach(Array(latest.log.sets.enumerated()), id: \.offset) { i, set in
                         HStack(spacing: 6) {
                             Text("подход \(i + 1)").font(.system(size: 9, weight: .bold)).foregroundStyle(TeenTheme.muted)
@@ -333,9 +378,11 @@ struct PremiumExerciseView: View {
                             Text("\(set.weight) кг").font(.caption.weight(.semibold)).monospacedDigit()
                             Text("\(set.reps) повт.").font(.caption.weight(.semibold)).monospacedDigit()
                         }
-                        .padding(.horizontal, 8).padding(.vertical, 5)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
                         .background(TeenTheme.raised, in: RoundedRectangle(cornerRadius: 8))
                     }
+                } else if !isExpanded, let latest {
+                    Text("Показать подходы").font(.caption2).foregroundStyle(TeenTheme.muted)
                 } else {
                     Text("Пока нет истории — заверши тренировку, чтобы увидеть результат").font(.caption).foregroundStyle(TeenTheme.muted)
                 }
@@ -510,9 +557,28 @@ struct PremiumStatisticsView: View {
         }
     }
     private var exerciseSelectionSheet: some View {
-        NavigationStack { List { Button { selectedExercise = nil; showExerciseSheet = false } label: { Text("Все упражнения") } }
-            ForEach(Catalog.all) { ex in Button { selectedExercise = ex; showExerciseSheet = false } label: { Text(ex.title) } }
-        }.navigationTitle("Упражнение").toolbar { ToolbarItem(placement: .cancellationAction) { Button("Отмена") { showExerciseSheet = false } } }
+        NavigationStack {
+            List {
+                Button { selectedExercise = nil; showExerciseSheet = false } label: {
+                    HStack {
+                        Text("Все упражнения")
+                        Spacer()
+                        if selectedExercise == nil { Image(systemName: "checkmark").foregroundStyle(TeenTheme.lime) }
+                    }
+                }
+                ForEach(Catalog.all) { ex in
+                    Button { selectedExercise = ex; showExerciseSheet = false } label: {
+                        HStack {
+                            Text(ex.title)
+                            Spacer()
+                            if selectedExercise?.id == ex.id { Image(systemName: "checkmark").foregroundStyle(TeenTheme.lime) }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Упражнение")
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Отмена") { showExerciseSheet = false } } }
+        }
     }
     private var metricPicker: some View {
         Picker("Показатель", selection: $selectedMetric) {
@@ -613,7 +679,9 @@ struct PremiumSettingsView: View {
     @State private var confirmClear = false
     @State private var message: String?
     @State private var presentsAIConsent = false
-    @State private var isAISettingsExpanded = false
+    @State private var isAISettingsExpanded = true
+    @State private var selectedProvider: AIProvider = .googleGemini
+    @State private var customModel = ""
     var body: some View {
         NavigationStack { ScrollView(showsIndicators: false) { VStack(spacing: 16) {
             HStack { VStack(alignment: .leading, spacing: 4) { Text("настройки").font(.system(.largeTitle, design: .rounded, weight: .bold)); Text("Данные остаются на устройстве").font(.subheadline).foregroundStyle(TeenTheme.muted) }; Spacer() }
@@ -621,7 +689,7 @@ struct PremiumSettingsView: View {
                 withAnimation { isAISettingsExpanded.toggle() }
             } label: {
                 HStack {
-                    TeenSectionTitle("AI-помощник")
+                    TeenSectionTitle("Teenage Coach")
                     Spacer()
                     Image(systemName: isAISettingsExpanded ? "chevron.up" : "chevron.down").font(.caption).foregroundStyle(TeenTheme.muted)
                 }
@@ -642,7 +710,7 @@ struct PremiumSettingsView: View {
                 .padding(.top, 8)
             }
             TeenSectionTitle("информация")
-            TeenCard { VStack(spacing: 8) { Text("GymForTeenage").font(.headline).multilineTextAlignment(.center); Text("Версия 1.0").font(.subheadline).foregroundStyle(TeenTheme.muted).multilineTextAlignment(.center); Divider().padding(.vertical, 4); Text("Данные приложения остаются на устройстве. Выбранный контекст AI Coach отправляется Google Gemini только после отдельного согласия.").font(.caption).foregroundStyle(TeenTheme.muted).multilineTextAlignment(.center); Link(destination: URL(string: "https://t.me/sellyou4ss")!) { Label("Telegram разработчика", systemImage: "paperplane.fill").font(.subheadline.weight(.semibold)).foregroundStyle(TeenTheme.ice).multilineTextAlignment(.center) } } }
+            TeenCard { VStack(spacing: 8) { Text("GymForTeenage").font(.headline).multilineTextAlignment(.center); Text("Версия 1.0").font(.subheadline).foregroundStyle(TeenTheme.muted).multilineTextAlignment(.center); Divider().padding(.vertical, 4); Text("Данные приложения остаются на устройстве. Выбранный контекст Teenage Coach отправляется только после отдельного согласия.").font(.caption).foregroundStyle(TeenTheme.muted).multilineTextAlignment(.center); Link(destination: URL(string: "https://t.me/sellyou4ss")!) { Label("Telegram разработчика", systemImage: "paperplane.fill").font(.subheadline.weight(.semibold)).foregroundStyle(TeenTheme.ice).multilineTextAlignment(.center) } } }
         }.frame(maxWidth: .infinity).padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 112) }.toolbar(.hidden, for: .navigationBar)
             .task { refreshAIKeyStatus() }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
@@ -660,10 +728,27 @@ struct PremiumSettingsView: View {
     private var aiSettingsCard: some View {
         TeenCard {
             VStack(alignment: .leading, spacing: 14) {
-                Toggle("Включить AI-помощника", isOn: $aiCoachEnabled).tint(TeenTheme.violet)
+                Toggle("Включить Teenage Coach", isOn: $aiCoachEnabled).tint(TeenTheme.violet)
                 Button("Изменить категории") { presentsAIConsent = true }
                     .font(.caption.weight(.semibold)).foregroundStyle(TeenTheme.lime)
-                SecureField(aiKeyAvailability == .present ? "Новый ключ для замены" : "API-ключ Gemini", text: $aiKeyInput)
+                
+                Picker("Провайдер", selection: $selectedProvider) {
+                    ForEach(AIProvider.allCases, id: \.self) { provider in
+                        Text(provider.name).tag(provider)
+                    }
+                }
+                .pickerStyle(.segmented)
+                
+                if selectedProvider == .openRouter {
+                    TextField("Модель (например, openrouter/free)", text: $customModel)
+                        .textContentType(.password)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .padding(12)
+                        .background(TeenTheme.raised, in: RoundedRectangle(cornerRadius: 12))
+                }
+                
+                SecureField(aiKeyAvailability == .present ? "Новый ключ для замены" : "API-ключ", text: $aiKeyInput)
                     .textContentType(.password)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
