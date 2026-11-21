@@ -419,10 +419,10 @@ struct PremiumProgressView: View {
     private var header: some View { Text("прогресс").font(.system(.largeTitle, design: .rounded, weight: .bold)).multilineTextAlignment(.center) }
     private func workoutHistoryCard(_ record: Record) -> some View {
         let nonSkippedExercises = record.exercises.filter { $0.status != "skipped" }
-        let completed = nonSkippedExercises.filter { exercise in
+        _ = nonSkippedExercises.filter { exercise in
             exercise.sets.contains { !$0.skipped && !$0.weight.isEmpty && !$0.reps.isEmpty }
         }
-        let skipped = record.exercises.filter { $0.status == "skipped" }
+        _ = record.exercises.filter { $0.status == "skipped" }
         return TeenCard { HStack(spacing: 14) {
             Image(systemName: "figure.strengthtraining.traditional").font(.title2).foregroundStyle(TeenTheme.violet).frame(width: 48, height: 48).background(TeenTheme.violet.opacity(0.12), in: Circle())
             VStack(alignment: .leading, spacing: 4) {
@@ -564,7 +564,7 @@ struct PremiumStatisticsView: View {
             .scrollContentBackground(.hidden)
             .navigationTitle("Упражнение")
             .searchable(text: $searchQuery, prompt: "Найти упражнение")
-            .toolbar { ToolbarItem(placement: .cancellationAction) { cancelToolbarItem } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Отмена") { showExerciseSheet = false } } }
         }
     }
     
@@ -594,9 +594,6 @@ struct PremiumStatisticsView: View {
         }
     }
     
-    private var cancelToolbarItem: some ToolbarContent {
-        ToolbarItem(placement: .cancellationAction) { Button("Отмена") { showExerciseSheet = false } }
-    }
     private var metricPicker: some View {
         Picker("Показатель", selection: $selectedMetric) {
             ForEach(MetricType.allCases, id: \.self) { m in Text(m.rawValue).tag(m) }
