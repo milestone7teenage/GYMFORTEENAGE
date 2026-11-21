@@ -1,12 +1,28 @@
 import Foundation
+import SwiftUI
 
-enum AIProvider: CaseIterable {
+enum AIProvider: CaseIterable, Identifiable, RawRepresentable {
     case openRouter
     case googleGemini
     
+    public init?(rawValue: String) {
+        switch rawValue {
+        case "openRouter": self = .openRouter
+        case "googleGemini": self = .googleGemini
+        default: return nil
+        }
+    }
+    
+    public var rawValue: String {
+        switch self {
+        case .openRouter: return "openRouter"
+        case .googleGemini: return "googleGemini"
+        }
+    }
+    
     var name: String {
         switch self {
-        case .openRouter: return "OpenRouter (Бесплатно / без VPN)"
+        case .openRouter: return "OpenRouter"
         case .googleGemini: return "Google Gemini"
         }
     }
@@ -35,9 +51,16 @@ enum AIProvider: CaseIterable {
 }
 
 enum AIConfiguration {
-    static var currentProvider: AIProvider = .googleGemini {
-        didSet {
-            currentModelID = currentProvider.defaultModel
+    @AppStorage("AIConfiguration.currentProvider") private static var storedProvider: String = "googleGemini"
+    
+    static var currentProvider: AIProvider {
+        get {
+            guard let rawValue = storedProvider, let provider = AIProvider(rawValue: rawValue) else { return .googleGemini }
+            return provider
+        }
+        set {
+            storedProvider = newValue.rawValue
+            currentModelID = newValue.defaultModel
         }
     }
     static var currentModelID = "gemini-3.5-flash-lite"

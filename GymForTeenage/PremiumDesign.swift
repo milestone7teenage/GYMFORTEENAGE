@@ -67,8 +67,9 @@ struct TeenSectionTitle: View {
                 Text(detail).font(.caption.weight(.medium)).foregroundStyle(TeenTheme.muted)
             }
             .padding(.horizontal, 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            Text(title).font(.system(.title3, design: .rounded, weight: .bold)).multilineTextAlignment(.center)
+            Text(title).font(.system(.title3, design: .rounded, weight: .bold)).frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

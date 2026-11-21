@@ -513,6 +513,7 @@ struct PremiumStatisticsView: View {
     @State private var selectedExercise: Exercise?
     @State private var selectedMetric: MetricType = .weight
     @State private var showExerciseSheet = false
+    @State private var searchQuery = ""
     enum MetricType: String, CaseIterable { case weight = "Вес", tonnage = "Тоннаж", sets = "Подходы" }
     var body: some View {
         NavigationStack { ScrollView(showsIndicators: false) { VStack(spacing: 16) {
@@ -544,6 +545,7 @@ struct PremiumStatisticsView: View {
                     Spacer()
                     Image(systemName: "chevron.down").font(.caption).foregroundStyle(TeenTheme.muted)
                 }
+                .padding(.horizontal, 14)
                 .padding(.vertical, 12)
                 .frame(maxWidth: .infinity)
                 .background(TeenTheme.ink.opacity(0.5), in: Capsule())
@@ -556,24 +558,30 @@ struct PremiumStatisticsView: View {
     private var exerciseSelectionSheet: some View {
         NavigationStack {
             List {
-                Button { selectedExercise = nil; showExerciseSheet = false } label: {
-                    HStack {
-                        Text("Все упражнения")
-                        Spacer()
-                        if selectedExercise == nil { Image(systemName: "checkmark").foregroundStyle(TeenTheme.lime) }
+                Section("Все упражнения") {
+                    Button { selectedExercise = nil; showExerciseSheet = false } label: {
+                        HStack {
+                            Text("Все упражнения").foregroundStyle(.primary)
+                            Spacer()
+                            if selectedExercise == nil { Image(systemName: "checkmark").foregroundStyle(TeenTheme.lime) }
+                        }
                     }
                 }
-                ForEach(Catalog.all) { ex in
-                    Button { selectedExercise = ex; showExerciseSheet = false } label: {
-                        HStack {
-                            Text(ex.title)
-                            Spacer()
-                            if selectedExercise?.id == ex.id { Image(systemName: "checkmark").foregroundStyle(TeenTheme.lime) }
+                Section {
+                    ForEach(Catalog.all.filter { $0.title.localizedCaseInsensitiveContains(searchQuery) }) { ex in
+                        Button { selectedExercise = ex; showExerciseSheet = false } label: {
+                            HStack {
+                                Text(ex.title).foregroundStyle(.primary)
+                                Spacer()
+                                if selectedExercise?.id == ex.id { Image(systemName: "checkmark").foregroundStyle(TeenTheme.lime) }
+                            }
                         }
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
             .navigationTitle("Упражнение")
+            .searchable(text: $searchQuery, placement: .navigationBar, prompt: "Найти упражнение")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Отмена") { showExerciseSheet = false } } }
         }
     }
@@ -677,8 +685,11 @@ struct PremiumSettingsView: View {
     @State private var message: String?
     @State private var presentsAIConsent = false
     @State private var isAISettingsExpanded = true
-    @State private var selectedProvider: AIProvider = .googleGemini
     @State private var customModel = ""
+    private var providerBinding: Binding<AIProvider> {
+        Binding(get: { AIConfiguration.currentProvider },
+                set: { AIConfiguration.currentProvider = $0 })
+    }
     var body: some View {
         NavigationStack { ScrollView(showsIndicators: false) { VStack(spacing: 16) {
             HStack { VStack(alignment: .leading, spacing: 4) { Text("настройки").font(.system(.largeTitle, design: .rounded, weight: .bold)); Text("Данные остаются на устройстве").font(.subheadline).foregroundStyle(TeenTheme.muted) }; Spacer() }
@@ -729,14 +740,14 @@ struct PremiumSettingsView: View {
                 Button("Изменить категории") { presentsAIConsent = true }
                     .font(.caption.weight(.semibold)).foregroundStyle(TeenTheme.lime)
                 
-                Picker("Провайдер", selection: $selectedProvider) {
+                Picker("Провайдер", selection: providerBinding) {
                     ForEach(AIProvider.allCases, id: \.self) { provider in
                         Text(provider.name).tag(provider)
                     }
                 }
                 .pickerStyle(.segmented)
                 
-                if selectedProvider == .openRouter {
+                if providerBinding.wrappedValue == .openRouter {
                     TextField("Модель (например, openrouter/free)", text: $customModel)
                         .textContentType(.password)
                         .textInputAutocapitalization(.never)
