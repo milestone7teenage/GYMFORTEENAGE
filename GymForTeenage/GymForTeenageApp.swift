@@ -165,7 +165,9 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
             
             // Для разовых задач удаляем оставшиеся уведомления
             if taskType == "oneTime" {
-                TaskNotificationManager.shared.cancelOneTimeTaskNotifications(for: taskId)
+                Task { @MainActor in
+                    TaskNotificationManager.shared.cancelOneTimeTaskNotifications(for: taskId)
+                }
             }
             
             // Можно открыть соответствующее окно задач
