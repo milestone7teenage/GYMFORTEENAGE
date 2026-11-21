@@ -245,20 +245,20 @@ struct PremiumHomeView: View {
             Button {
                 showOneTimeTasks = true
             } label: {
-                taskCard(title: "Разовая задача", icon: "checklist", count: taskStore.oneTimeTasks.count)
+                taskCard(title: "Разовая задача", icon: "checklist")
             }
             .buttonStyle(TeenPressStyle())
             
             Button {
                 showRecurringTasks = true
             } label: {
-                taskCard(title: "Регулярная задача", icon: "repeat", count: taskStore.recurringTasks.count)
+                taskCard(title: "Регулярная задача", icon: "repeat")
             }
             .buttonStyle(TeenPressStyle())
         }
     }
     
-    private func taskCard(title: String, icon: String, count: Int) -> some View {
+    private func taskCard(title: String, icon: String) -> some View {
         TeenCard {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -266,14 +266,6 @@ struct PremiumHomeView: View {
                         .foregroundStyle(TeenTheme.lime)
                         .font(.title3)
                     Spacer()
-                    if count > 0 {
-                        Text("\(count)")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(TeenTheme.lime)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(TeenTheme.lime.opacity(0.15), in: Capsule())
-                    }
                 }
                 Text(title)
                     .font(.subheadline.weight(.semibold))
