@@ -241,7 +241,7 @@ struct PremiumHomeView: View {
     }
     
     private var tasksSection: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 12) {
             Button {
                 showOneTimeTasks = true
             } label: {
@@ -260,20 +260,18 @@ struct PremiumHomeView: View {
     
     private func taskCard(title: String, icon: String) -> some View {
         TeenCard {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Image(systemName: icon)
-                        .foregroundStyle(TeenTheme.lime)
-                        .font(.title3)
-                    Spacer()
-                }
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .foregroundStyle(TeenTheme.lime)
+                    .font(.title3)
                 Text(title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white)
-                Text("Нажми для управления")
-                    .font(.caption2)
-                    .foregroundStyle(TeenTheme.muted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: 72)
         }
         .frame(maxWidth: .infinity)
     }

@@ -20,11 +20,20 @@ struct AIInsightsComparisonWorkout: Codable, Equatable, Sendable {
     let tonnage: Double
 }
 
+private struct AIInsightsPromptExercise: Encodable {
+    let name: String
+    let appearances: Int
+    let totalSets: Int
+    let bestWeightKg: Double
+    let lastWeightKg: Double
+}
+
 private struct AIInsightsPromptContext: Encodable {
     let period: AIAnalysisPeriod
     let computedMetrics: [AIComputedMetric]
     let measurements: [AIInsightsMeasurementValue]
     let comparisonWorkouts: [AIInsightsComparisonWorkout]
+    let exercises: [AIInsightsPromptExercise]
     let limitations: [String]
 }
 
@@ -195,6 +204,7 @@ struct AIInsightsEngine {
                 )
             },
             comparisonWorkouts: Array(comparisons),
+            exercises: exerciseSummaries(from: weekly),
             limitations: limitations
         )
         let promptData = (try? encoder.encode(promptContext)) ?? Data()
@@ -208,6 +218,37 @@ struct AIInsightsEngine {
             measurementCount: measurements.count,
             promptJSON: String(data: promptData, encoding: .utf8) ?? "{}"
         )
+    }
+
+    private func exerciseSummaries(from records: [Record]) -> [AIInsightsPromptExercise] {
+        var byExercise: [String: (appearances: Set<UUID>, totalSets: Int, bestWeight: Double, lastWeight: Double)] = [:]
+        for record in records {
+            for exercise in record.exercises where exercise.status != "skipped" {
+                let working = exercise.sets.filter { !$0.skipped && !$0.weight.isEmpty }
+                guard !working.isEmpty else { continue }
+                let weights = working.compactMap { Double($0.weight.replacingOccurrences(of: ",", with: ".")) }
+                guard let best = weights.max() else { continue }
+                let last = weights.last ?? 0
+                var entry = byExercise[exercise.actualID]
+                    ?? (appearances: [], totalSets: 0, bestWeight: 0, lastWeight: 0)
+                entry.appearances.insert(record.id)
+                entry.totalSets += working.filter { Int($0.reps) != nil }.count
+                if best > entry.bestWeight { entry.bestWeight = best }
+                if last > 0 { entry.lastWeight = last }
+                byExercise[exercise.actualID] = entry
+            }
+        }
+        return byExercise
+            .map { key, entry in
+                AIInsightsPromptExercise(
+                    name: Catalog.e(key).title,
+                    appearances: entry.appearances.count,
+                    totalSets: entry.totalSets,
+                    bestWeightKg: entry.bestWeight,
+                    lastWeightKg: entry.lastWeight
+                )
+            }
+            .sorted { $0.name < $1.name }
     }
 
     private func latestMeasurements(in values: [Measure], start: Date, end: Date) -> [Measure] {
@@ -341,7 +382,7 @@ final class AIInsightsCoordinator {
         }
         guard let apiKey, !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             // При отсутствии ключа показываем локально рассчитанную сводку
-            state = AIInsightsViewState(availability: .ready, insights: localInsights, isStale: false, message: "Локально рассчитанная сводка по тренировкам за 7 дней.")
+            state = AIInsightsViewState(availability: .ready, insights: localInsights, isStale: false, message: "Локальная сводка по тренировкам за 7 дней.")
             return
         }
         guard requiredConsentCategories.isSubset(of: consentedCategories) else {
@@ -377,20 +418,39 @@ final class AIInsightsCoordinator {
             }
             guard requestGeneration == generation else { return }
             guard engine.build(from: store, now: now).fingerprint == analysis.fingerprint else {
-                state = AIInsightsViewState(availability: .ready, insights: localInsights, isStale: false, message: "Локально рассчитанная сводка (данные изменились во время анализа).")
+                state = AIInsightsViewState(availability: .ready, insights: localInsights, isStale: false, message: "Локальная сводка по тренировкам за 7 дней.")
                 return
             }
-            guard responseText.utf8.count <= AIConfiguration.maximumResponseBytes,
-                  let data = responseText.data(using: .utf8) else {
+            guard responseText.utf8.count <= AIConfiguration.maximumResponseBytes else {
                 throw GeminiClientError.responseTooLarge
             }
-            let narrative = try JSONDecoder().decode(AIInsightsNarrative.self, from: data)
-            let insights = try AIInsightsValidator.makeInsights(
-                from: narrative,
+
+            let insights: AIInsights
+            // Бесплатные модели OpenRouter часто оборачивают JSON в ```json ... ```
+            // или добавляют поясняющий текст до/после. Очищаем ответ перед
+            // JSONDecoder: вырезаем markdown-ограждения и берём подстроку от
+            // первой `{` до последней `}`. Если JSON в ответе отсутствует вовсе,
+            // трактуем чистый связный текст как основную сводку, а не падаем
+            // с ошибкой формата и не перезаписываем её локальной заглушкой.
+            let cleanedJSON = Self.sanitizeInsightsJSON(responseText)
+            if let cleanedJSON, let data = cleanedJSON.data(using: .utf8),
+               let narrative = try? JSONDecoder().decode(AIInsightsNarrative.self, from: data) {
+                insights = try AIInsightsValidator.makeInsights(
+                    from: narrative,
+                    period: analysis.period,
+                    computedMetrics: analysis.computedMetrics,
+                    localLimitations: analysis.limitations
+                )
+            } else if let plainInsights = Self.makePlainTextInsights(
+                text: cleanedJSON ?? responseText,
                 period: analysis.period,
                 computedMetrics: analysis.computedMetrics,
                 localLimitations: analysis.limitations
-            )
+            ) {
+                insights = plainInsights
+            } else {
+                throw GeminiClientError.invalidResponse
+            }
             let envelope = AIInsightsCacheEnvelope(
                 fingerprint: analysis.fingerprint,
                 contextAlgorithmVersion: AIInsightsEngine.contextAlgorithmVersion,
@@ -408,17 +468,16 @@ final class AIInsightsCoordinator {
             guard requestGeneration == generation else { return }
             if Task.isCancelled || error == .cancelled {
                 lastAttemptFingerprint = nil
-                state = AIInsightsViewState(availability: .ready, insights: localInsights, isStale: false, message: "Локально рассчитанная сводка (запрос отменён).")
+                state = AIInsightsViewState(availability: .ready, insights: localInsights, isStale: false, message: "Локальная сводка по тренировкам за 7 дней.")
                 return
             }
-            state = AIInsightsViewState(availability: .ready, insights: localInsights, isStale: false, message: "Локально рассчитанная сводка (сетевая ошибка: \(error.userMessage)).")
-        } catch let error as AIInsightsValidationError {
+            state = AIInsightsViewState(availability: .ready, insights: localInsights, isStale: false, message: "Локальная сводка по тренировкам за 7 дней.")
+        } catch is AIInsightsValidationError {
             guard requestGeneration == generation else { return }
-            state = AIInsightsViewState(availability: .ready, insights: localInsights, isStale: false, message: "Локально рассчитанная сводка (сетевая ошибка: \(error.userMessage)).")
+            state = AIInsightsViewState(availability: .ready, insights: localInsights, isStale: false, message: "Локальная сводка по тренировкам за 7 дней.")
         } catch {
             guard requestGeneration == generation else { return }
-            let providerName = AIConfiguration.currentProvider == .openRouter ? "OpenRouter" : "Gemini"
-            state = AIInsightsViewState(availability: .ready, insights: localInsights, isStale: false, message: "Локально рассчитанная сводка (\(providerName) вернул неподдерживаемые данные).")
+            state = AIInsightsViewState(availability: .ready, insights: localInsights, isStale: false, message: "Локальная сводка по тренировкам за 7 дней.")
         }
     }
 
@@ -462,7 +521,7 @@ final class AIInsightsCoordinator {
     }
 
     private static let insightsSystemInstruction = """
-    Проанализируй только переданные приложением локально рассчитанные показатели и сравнительные примеры. Верни JSON с полями schemaVersion (1), summary, observations (элементы с text и evidenceKeys) и limitations. Числа, даты, проценты и новые количественные утверждения в текстовых полях запрещены: числовые факты уже рассчитаны приложением. В evidenceKeys используй только переданные ключи показателей. Не выдумывай наблюдения, если оснований недостаточно.
+    Ты — тренер для подростка. Проанализируй переданные приложением показатели за 7 дней и список упражнений из раздела exercises (названия, число тренировок в неделю, подходы, лучший и последний рабочий вес в кг). Верни JSON с полями schemaVersion (1), summary, observations (элементы с text и evidenceKeys) и limitations. Дай 2–3 коротких, прикладных вывода тренера на русском языке: прогресс по весам, объём (подходы/тоннаж) и конкретная рекомендация на следующую тренировку. Опирайся только на переданные данные, называй упражнения по имени прямо в тексте, но без воды. В текстовых полях (summary, observations.text, limitations) запрещены числа, даты и проценты — числовые факты уже рассчитаны приложением. В evidenceKeys используй только переданные ключи показателей (например workouts_7d, completed_sets_7d, tonnage_7d, latest_weight_kg, latest_height_cm); названия упражнений в evidenceKeys не добавляй, только в текст. Не выдумывай наблюдения, если оснований недостаточно.
     """
     
     private func generateLocalInsights(from analysis: AIInsightsAnalysis) -> AIInsights? {
@@ -544,6 +603,58 @@ final class AIInsightsCoordinator {
             evidence: limitedObservations.map { observation in
                 AIInsightEvidence(key: observation.evidenceKeys.first ?? "", metricKeys: observation.evidenceKeys)
             }
+        )
+    }
+
+    /// Очищает ответ AI-провайдера от markdown-ограждений и поясняющего текста,
+    /// возвращая подстроку от первой `{` до последней `}`. Если JSON-объект в
+    /// ответе отсутствует, возвращает nil.
+    private static func sanitizeInsightsJSON(_ raw: String) -> String? {
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.contains("```") {
+            text = text.replacingOccurrences(of: "```", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard let firstBrace = text.firstIndex(of: "{"),
+              let lastBrace = text.lastIndex(of: "}"),
+              firstBrace < lastBrace else {
+            return nil
+        }
+        let cleaned = String(text[firstBrace...lastBrace])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? nil : cleaned
+    }
+
+    /// Если модель вернула чистый связный текст вместо JSON, используем его как
+    /// основную сводку (headline / summary), а не перезаписываем локальной
+    /// заглушкой. Если переданный текст — JSON (например {"headline": ...}),
+    /// извлекаем строковое значение headline или summary.
+    private static func makePlainTextInsights(
+        text: String,
+        period: AIAnalysisPeriod,
+        computedMetrics: [AIComputedMetric],
+        localLimitations: [String]
+    ) -> AIInsights? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        var candidate = trimmed
+        if trimmed.hasPrefix("{") {
+            if let object = try? JSONSerialization.jsonObject(with: Data(trimmed.utf8)) as? [String: Any],
+               let value = (object["headline"] as? String) ?? (object["summary"] as? String) {
+                candidate = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        guard !candidate.isEmpty, candidate.count <= 500 else { return nil }
+
+        return AIInsights(
+            schemaVersion: AIInsights.currentSchemaVersion,
+            period: period,
+            summary: candidate,
+            observations: [],
+            computedMetrics: computedMetrics,
+            limitations: localLimitations,
+            evidence: []
         )
     }
 }

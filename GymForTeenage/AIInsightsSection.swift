@@ -17,6 +17,22 @@ struct AIInsightsSection: View {
                     Image(systemName: "sparkles").foregroundStyle(TeenTheme.violet).font(.title3)
                     Text("Teenage Coach").font(.headline)
                     Spacer()
+                    if showsAction {
+                        Button {
+                            if coordinator.state.availability == .consentRequired {
+                                presentsConsent = true
+                            } else {
+                                Task { await refresh(force: true, allowGeneration: true) }
+                            }
+                        } label: {
+                            Image(systemName: coordinator.state.availability == .loading ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
+                                .font(.subheadline.weight(.semibold)).foregroundStyle(TeenTheme.lime)
+                                .frame(width: 36, height: 36).background(TeenTheme.raised, in: Circle())
+                        }
+                        .buttonStyle(TeenPressStyle())
+                        .disabled(coordinator.state.availability == .loading)
+                        .accessibilityLabel(actionTitle)
+                    }
                     Button { presentsChat = true } label: {
                         Image(systemName: "bubble.left.and.bubble.right")
                             .font(.subheadline.weight(.semibold)).foregroundStyle(TeenTheme.lime)
@@ -29,24 +45,13 @@ struct AIInsightsSection: View {
                 if let insights = coordinator.state.insights, coordinator.state.availability != .disabled {
                     Text(insights.summary).font(.subheadline.weight(.medium)).fixedSize(horizontal: false, vertical: true)
                     if !insights.observations.isEmpty {
-                        VStack(alignment: .leading, spacing: 9) {
-                            ForEach(Array(insights.observations.enumerated()), id: \.offset) { _, observation in
-                                VStack(alignment: .leading, spacing: 5) {
-                                    Label(observation.text, systemImage: "checkmark.circle.fill")
-                                        .font(.caption).foregroundStyle(.white).fixedSize(horizontal: false, vertical: true)
-                                    HStack(spacing: 6) {
-                                        ForEach(observation.evidenceKeys, id: \.self) { key in
-                                            if let metric = insights.computedMetrics.first(where: { $0.key == key }) {
-                                                Text("\(metricTitle(key)): \(metric.value.formatted(.number.precision(.fractionLength(0...1)))) \(metric.unit)")
-                                                    .font(.caption2).foregroundStyle(TeenTheme.muted)
-                                            }
-                                        }
-                                    }
-                                }
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(Array(insights.observations.prefix(3).enumerated()), id: \.offset) { _, observation in
+                                Label(observation.text, systemImage: "checkmark.circle.fill")
+                                    .font(.caption).foregroundStyle(.white).fixedSize(horizontal: false, vertical: true)
                             }
                         }
                     }
-                    metricsGrid(insights.computedMetrics)
                     if coordinator.state.isStale {
                         Label("Сохранённая сводка может быть неактуальной", systemImage: "clock.arrow.circlepath")
                             .font(.caption2).foregroundStyle(TeenTheme.muted)
@@ -60,21 +65,6 @@ struct AIInsightsSection: View {
                     Text(message).font(.caption).foregroundStyle(TeenTheme.muted).fixedSize(horizontal: false, vertical: true)
                 } else {
                     statusText
-                }
-
-                if showsAction {
-                    Button(actionTitle) {
-                        if coordinator.state.availability == .consentRequired {
-                            presentsConsent = true
-                        } else {
-                            Task { await refresh(force: true, allowGeneration: true) }
-                        }
-                    }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(TeenTheme.ink)
-                    .padding(.horizontal, 13).padding(.vertical, 8)
-                    .background(TeenTheme.lime, in: Capsule())
-                    .disabled(coordinator.state.availability == .loading)
                 }
             }
         }
@@ -103,30 +93,6 @@ struct AIInsightsSection: View {
         .sheet(isPresented: $presentsConsent) {
             AIConsentSheet(requiredCategories: coordinator.requiredConsentCategories, initialCategories: consentStore.consentedCategories)
                 .environment(consentStore)
-        }
-    }
-
-    private func metricsGrid(_ metrics: [AIComputedMetric]) -> some View {
-        let columns = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
-        return LazyVGrid(columns: columns, spacing: 8) {
-            ForEach(metrics, id: \.key) { metric in
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(metricTitle(metric.key))
-                        .font(.caption2)
-                        .foregroundStyle(TeenTheme.muted)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .allowsTightening(true)
-                    Text("\(metric.value.formatted(.number.precision(.fractionLength(0...1)))) \(metric.unit)")
-                        .font(.caption.weight(.semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(9)
-                .background(TeenTheme.raised, in: RoundedRectangle(cornerRadius: 12))
-                .fixedSize(horizontal: false, vertical: true)
-            }
         }
     }
 
@@ -189,19 +155,6 @@ struct AIInsightsSection: View {
             )
         } catch {
             keychainError = "Не удалось проверить API-ключ в защищённом хранилище. Повтори проверку в настройках."
-        }
-    }
-
-    private func metricTitle(_ key: String) -> String {
-        switch key {
-        case "workouts_7d": return "Тренировки · 7 дн."
-        case "completed_sets_7d": return "Подходы · 7 дн."
-        case "tonnage_7d": return "Тоннаж · 7 дн."
-        case "active_sets": return "Подходы (активная)"
-        case "active_tonnage": return "Тоннаж (активная)"
-        case "latest_weight_kg": return "Последний вес"
-        case "latest_height_cm": return "Последний рост"
-        default: return key
         }
     }
 }
