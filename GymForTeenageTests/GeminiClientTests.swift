@@ -34,7 +34,8 @@ final class GeminiClientTests: XCTestCase {
             body: body,
             apiKey: "test-api-key",
             endpoint: endpoint,
-            timeoutInterval: 2
+            timeoutInterval: 2,
+            provider: .googleGemini
         )
         XCTAssertFalse(String(decoding: try XCTUnwrap(urlRequest.httpBody), as: UTF8.self).contains("test-api-key"))
         XCTAssertNil(URLComponents(url: try XCTUnwrap(urlRequest.url), resolvingAgainstBaseURL: false)?.query)
@@ -75,7 +76,7 @@ final class GeminiClientTests: XCTestCase {
             reminders: store.reminders
         ))
         let markerKey = "isolated-urlprotocol-test-key-\(UUID().uuidString)"
-        let coach = AICoachSession(requestCoordinator: AIRequestCoordinator(client: client))
+        let coach = AICoachSession(requestCoordinator: AIRequestCoordinator(geminiClient: client))
 
         let sent = await coach.send(
             "Как менялась бабочка за неделю?",

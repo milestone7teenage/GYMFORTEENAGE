@@ -36,7 +36,7 @@ private actor RequestCoordinatorStub: GeminiGenerating {
 final class AIRequestCoordinatorTests: XCTestCase {
     func testChatCancelsBackgroundInsightsAndUsesOnlyOneNetworkSlot() async throws {
         let client = RequestCoordinatorStub()
-        let coordinator = AIRequestCoordinator(client: client)
+        let coordinator = AIRequestCoordinator(geminiClient: client)
         let insights = request("background")
         let chat = request("chat")
         let backgroundTask = Task { try await coordinator.generateInsightsContent(insights, apiKey: "test-key") }
@@ -62,7 +62,7 @@ final class AIRequestCoordinatorTests: XCTestCase {
 
     func testIdenticalInsightsCallsShareTheSameOperation() async throws {
         let client = RequestCoordinatorStub()
-        let coordinator = AIRequestCoordinator(client: client)
+        let coordinator = AIRequestCoordinator(geminiClient: client)
         let request = self.request("same")
 
         async let first = coordinator.generateInsightsContent(request, apiKey: "test-key")
@@ -80,7 +80,7 @@ final class AIRequestCoordinatorTests: XCTestCase {
         let store = Store(fileURL: fileURL)
         store.records = [record(date: Date())]
         let client = RequestCoordinatorStub()
-        let session = AICoachSession(requestCoordinator: AIRequestCoordinator(client: client))
+        let session = AICoachSession(requestCoordinator: AIRequestCoordinator(geminiClient: client))
 
         let consumed = await session.send(
             "Как прошла моя неделя?",
@@ -109,7 +109,7 @@ final class AIRequestCoordinatorTests: XCTestCase {
         store.records = [record(date: Date(), weight: "25"), record(date: Date(), exerciseID: "hammer", weight: "95")]
         store.measures = [Measure(kind: "weight", value: 62)]
         let client = RequestCoordinatorStub()
-        let session = AICoachSession(requestCoordinator: AIRequestCoordinator(client: client))
+        let session = AICoachSession(requestCoordinator: AIRequestCoordinator(geminiClient: client))
 
         let consumed = await session.send(
             "Как менялась бабочка за неделю?",
@@ -139,7 +139,7 @@ final class AIRequestCoordinatorTests: XCTestCase {
         let store = Store(fileURL: fileURL)
         store.records = [record(date: Date())]
         let client = RequestCoordinatorStub()
-        let session = AICoachSession(requestCoordinator: AIRequestCoordinator(client: client))
+        let session = AICoachSession(requestCoordinator: AIRequestCoordinator(geminiClient: client))
 
         let consumed = await session.send(
             "Как менялась бабочка за неделю?",
@@ -162,7 +162,7 @@ final class AIRequestCoordinatorTests: XCTestCase {
         let store = Store(fileURL: fileURL)
         store.records = [record(date: Date())]
         let client = RequestCoordinatorStub()
-        let session = AICoachSession(requestCoordinator: AIRequestCoordinator(client: client))
+        let session = AICoachSession(requestCoordinator: AIRequestCoordinator(geminiClient: client))
         let question = "Как менялась бабочка за неделю?"
 
         let firstAttempt = await session.send(question, store: store, apiKey: "test-key", isAIEnabled: true, consentedCategories: [])
@@ -194,7 +194,7 @@ final class AIRequestCoordinatorTests: XCTestCase {
         let store = Store(fileURL: fileURL)
         store.records = [record(date: Date())]
         let client = RequestCoordinatorStub()
-        let session = AICoachSession(requestCoordinator: AIRequestCoordinator(client: client))
+        let session = AICoachSession(requestCoordinator: AIRequestCoordinator(geminiClient: client))
 
         let firstConsumed = await session.send(
             "Как менялась бабочка за неделю?",
@@ -226,7 +226,7 @@ final class AIRequestCoordinatorTests: XCTestCase {
         store.records = [record(date: Date())]
         let client = RequestCoordinatorStub()
         await client.failNextRequest()
-        let session = AICoachSession(requestCoordinator: AIRequestCoordinator(client: client))
+        let session = AICoachSession(requestCoordinator: AIRequestCoordinator(geminiClient: client))
         let question = "Как менялась бабочка за неделю?"
 
         _ = await session.send(question, store: store, apiKey: "test-key", isAIEnabled: true, consentedCategories: [.chatMessages, .exerciseHistory])
