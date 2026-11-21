@@ -2,6 +2,7 @@ import SwiftUI
 import Charts
 import UniformTypeIdentifiers
 import UIKit
+import Foundation
 
 struct PremiumRootView: View {
     @Environment(Store.self) private var store
