@@ -594,7 +594,7 @@ struct PremiumStatisticsView: View {
         }
     }
     
-    private var cancelToolbarItem: some ToolbarItemContent {
+    private var cancelToolbarItem: some ToolbarContent {
         ToolbarItem(placement: .cancellationAction) { Button("Отмена") { showExerciseSheet = false } }
     }
     private var metricPicker: some View {
