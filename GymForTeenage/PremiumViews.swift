@@ -563,7 +563,7 @@ struct PremiumStatisticsView: View {
             }
             .scrollContentBackground(.hidden)
             .navigationTitle("Упражнение")
-            .searchable(text: $searchQuery, placement: .navigationBar, prompt: "Найти упражнение")
+            .searchable(text: $searchQuery, prompt: "Найти упражнение")
             .toolbar { ToolbarItem(placement: .cancellationAction) { cancelToolbarItem } }
         }
     }
