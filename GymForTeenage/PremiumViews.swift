@@ -9,6 +9,8 @@ struct PremiumRootView: View {
     @State private var selection = 0
     @State private var aiInsightsCoordinator = AIInsightsCoordinator()
     @State private var aiConsentStore = AIConsentStore()
+    @State private var taskStore = TaskStore()
+    @State private var taskNotificationManager = TaskNotificationManager.shared
     var body: some View {
         ZStack(alignment: .bottom) {
             TeenTheme.ink.ignoresSafeArea()
@@ -26,6 +28,8 @@ struct PremiumRootView: View {
         }
         .environment(aiInsightsCoordinator)
         .environment(aiConsentStore)
+        .environment(taskStore)
+        .environment(taskNotificationManager)
         .tint(TeenTheme.lime)
         .preferredColorScheme(.dark)
         .alert("Сообщение", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
@@ -58,10 +62,14 @@ private struct PremiumTabBar: View {
 
 struct PremiumHomeView: View {
     @Environment(Store.self) private var store
+    @Environment(TaskStore.self) private var taskStore
+    @Environment(TaskNotificationManager.self) private var notificationManager
     @State private var showMeasure = false
     @State private var kind = "weight"
     @State private var value = ""
     @State private var selectedWorkoutIndex = 0
+    @State private var showOneTimeTasks = false
+    @State private var showRecurringTasks = false
     @GestureState private var dragOffset: CGFloat = 0
     private let swipeThreshold: CGFloat = 80
     private var waterProgress: Double { Double(store.todayML) / 3000 }
@@ -74,11 +82,28 @@ struct PremiumHomeView: View {
                     workoutCarousel
                     waterCard
                     creatineCard
+                    tasksSection
                 }
                 .padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 112)
+                .sheet(isPresented: $showOneTimeTasks) {
+                    OneTimeTaskView()
+                }
+                .sheet(isPresented: $showRecurringTasks) {
+                    RecurringTaskView()
+                }
             }
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showMeasure) { measureSheet }
+            .sheet(isPresented: $showOneTimeTasks) {
+                OneTimeTaskView()
+                    .environment(taskStore)
+                    .environment(notificationManager)
+            }
+            .sheet(isPresented: $showRecurringTasks) {
+                RecurringTaskView()
+                    .environment(taskStore)
+                    .environment(notificationManager)
+            }
         }
     }
     private var workoutCarousel: some View {
@@ -214,6 +239,53 @@ struct PremiumHomeView: View {
             }
         }
     }
+    
+    private var tasksSection: some View {
+        HStack(spacing: 8) {
+            Button {
+                showOneTimeTasks = true
+            } label: {
+                taskCard(title: "Разовая задача", icon: "checklist", count: taskStore.oneTimeTasks.count)
+            }
+            .buttonStyle(TeenPressStyle())
+            
+            Button {
+                showRecurringTasks = true
+            } label: {
+                taskCard(title: "Регулярная задача", icon: "repeat", count: taskStore.recurringTasks.count)
+            }
+            .buttonStyle(TeenPressStyle())
+        }
+    }
+    
+    private func taskCard(title: String, icon: String, count: Int) -> some View {
+        TeenCard {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Image(systemName: icon)
+                        .foregroundStyle(TeenTheme.lime)
+                        .font(.title3)
+                    Spacer()
+                    if count > 0 {
+                        Text("\(count)")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(TeenTheme.lime)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(TeenTheme.lime.opacity(0.15), in: Capsule())
+                    }
+                }
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                Text("Нажми для управления")
+                    .font(.caption2)
+                    .foregroundStyle(TeenTheme.muted)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+    
     private var measureSheet: some View {
         NavigationStack { ZStack { TeenTheme.ink.ignoresSafeArea(); VStack(spacing: 18) { Text(kind == "weight" ? "Новый вес" : "Новый рост").font(.title2.bold()); TextField(kind == "weight" ? "кг" : "см", text: $value).keyboardType(.decimalPad).font(.system(.title, design: .rounded)).multilineTextAlignment(.center).padding().background(TeenTheme.surface, in: RoundedRectangle(cornerRadius: 18)); Button("Сохранить") { if let input = Double(value.replacingOccurrences(of: ",", with: ".")), input > 0 { store.measures.append(.init(kind: kind, value: input)); store.save() }; showMeasure = false }.buttonStyle(.borderedProminent).tint(TeenTheme.lime) }.padding(24) }.toolbar { ToolbarItem(placement: .cancellationAction) { Button("Отмена") { showMeasure = false } } } }
     }

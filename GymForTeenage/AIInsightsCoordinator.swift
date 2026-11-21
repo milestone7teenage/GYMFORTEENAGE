@@ -301,6 +301,9 @@ final class AIInsightsCoordinator {
     ) async {
         let analysis = engine.build(from: store, now: now)
         requiredConsentCategories = analysis.measurementCount > 0 ? [.weeklyInsights, .bodyMeasurements] : [.weeklyInsights]
+        
+        // Генерация локальной сводки
+        let localInsights = generateLocalInsights(from: analysis)
         let previous = cache.load()
         let previousInsights = previous?.insights
         let isCurrent = previous?.fingerprint == analysis.fingerprint
@@ -337,11 +340,13 @@ final class AIInsightsCoordinator {
             return
         }
         guard let apiKey, !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            state = AIInsightsViewState(availability: .missingKey, insights: previousInsights, isStale: previousInsights != nil, message: "Сохрани API-ключ в настройках.")
+            // При отсутствии ключа показываем локально рассчитанную сводку
+            state = AIInsightsViewState(availability: .ready, insights: localInsights, isStale: false, message: "Локально рассчитанная сводка по тренировкам за 7 дней.")
             return
         }
         guard requiredConsentCategories.isSubset(of: consentedCategories) else {
-            state = AIInsightsViewState(availability: .consentRequired, insights: previousInsights, isStale: previousInsights != nil, message: "Перед анализом нужно разрешить отправку недельных показателей.")
+            // При отсутствии согласия показываем локальную сводку
+            state = AIInsightsViewState(availability: .ready, insights: localInsights, isStale: false, message: "Локально рассчитанная сводка (отправка данных не подтверждена).")
             return
         }
 
@@ -372,7 +377,7 @@ final class AIInsightsCoordinator {
             }
             guard requestGeneration == generation else { return }
             guard engine.build(from: store, now: now).fingerprint == analysis.fingerprint else {
-                state = AIInsightsViewState(availability: .failed, insights: previousInsights, isStale: previousInsights != nil, message: "Данные изменились во время анализа. Открой статистику ещё раз, чтобы обновить сводку.")
+                state = AIInsightsViewState(availability: .ready, insights: localInsights, isStale: false, message: "Локально рассчитанная сводка (данные изменились во время анализа).")
                 return
             }
             guard responseText.utf8.count <= AIConfiguration.maximumResponseBytes,
@@ -403,17 +408,17 @@ final class AIInsightsCoordinator {
             guard requestGeneration == generation else { return }
             if Task.isCancelled || error == .cancelled {
                 lastAttemptFingerprint = nil
-                state = AIInsightsViewState(availability: previousInsights == nil ? .noData : .ready, insights: previousInsights, isStale: previousInsights != nil && !isCurrent, message: nil)
+                state = AIInsightsViewState(availability: .ready, insights: localInsights, isStale: false, message: "Локально рассчитанная сводка (запрос отменён).")
                 return
             }
-            state = AIInsightsViewState(availability: .failed, insights: previousInsights, isStale: previousInsights != nil, message: error.userMessage)
+            state = AIInsightsViewState(availability: .ready, insights: localInsights, isStale: false, message: "Локально рассчитанная сводка (сетевая ошибка: \(error.userMessage)).")
         } catch let error as AIInsightsValidationError {
             guard requestGeneration == generation else { return }
-            state = AIInsightsViewState(availability: .failed, insights: previousInsights, isStale: previousInsights != nil, message: error.userMessage)
+            state = AIInsightsViewState(availability: .ready, insights: localInsights, isStale: false, message: "Локально рассчитанная сводка (сетевая ошибка: \(error.userMessage)).")
         } catch {
             guard requestGeneration == generation else { return }
             let providerName = AIConfiguration.currentProvider == .openRouter ? "OpenRouter" : "Gemini"
-            state = AIInsightsViewState(availability: .failed, insights: previousInsights, isStale: previousInsights != nil, message: "\(providerName) вернул данные, которые приложение не смогло проверить.")
+            state = AIInsightsViewState(availability: .ready, insights: localInsights, isStale: false, message: "Локально рассчитанная сводка (\(providerName) вернул неподдерживаемые данные).")
         }
     }
 
@@ -459,4 +464,86 @@ final class AIInsightsCoordinator {
     private static let insightsSystemInstruction = """
     Проанализируй только переданные приложением локально рассчитанные показатели и сравнительные примеры. Верни JSON с полями schemaVersion (1), summary, observations (элементы с text и evidenceKeys) и limitations. Числа, даты, проценты и новые количественные утверждения в текстовых полях запрещены: числовые факты уже рассчитаны приложением. В evidenceKeys используй только переданные ключи показателей. Не выдумывай наблюдения, если оснований недостаточно.
     """
+    
+    private func generateLocalInsights(from analysis: AIInsightsAnalysis) -> AIInsights? {
+        guard analysis.weeklyWorkoutCount > 0 || analysis.measurementCount > 0 else {
+            return nil
+        }
+        
+        let summary: String
+        if analysis.weeklyWorkoutCount == 0 {
+            summary = "За последние 7 дней завершённых тренировок не было."
+        } else {
+            let workoutsText = analysis.weeklyWorkoutCount == 1 ? "1 тренировку" : "\(analysis.weeklyWorkoutCount) тренировки"
+            let sets = analysis.computedMetrics.first(where: { $0.key == "completed_sets_7d" })?.value ?? 0
+            let tonnage = analysis.computedMetrics.first(where: { $0.key == "tonnage_7d" })?.value ?? 0
+            
+            if analysis.measurementCount > 0 {
+                summary = "За неделю выполнено \(workoutsText)."
+            } else {
+                summary = "За неделю выполнено \(workoutsText), \(Int(sets)) подходов, общий тоннаж \(Int(tonnage)) кг·повторений."
+            }
+        }
+        
+        var observations: [AIInsightObservation] = []
+        
+        // Наблюдения на основе метрик
+        for metric in analysis.computedMetrics {
+            switch metric.key {
+            case "workouts_7d" where metric.value > 0:
+                let count = Int(metric.value)
+                observations.append(AIInsightObservation(
+                    text: count == 1 ? "Выполнена тренировка за неделю." : "Выполнены тренировки за неделю.",
+                    evidenceKeys: ["workouts_7d"]
+                ))
+            case "completed_sets_7d" where metric.value > 0:
+                observations.append(AIInsightObservation(
+                    text: "Подходы выполнены за неделю.",
+                    evidenceKeys: ["completed_sets_7d"]
+                ))
+            case "tonnage_7d" where metric.value > 0:
+                observations.append(AIInsightObservation(
+                    text: "Тоннаж набран за неделю.",
+                    evidenceKeys: ["tonnage_7d"]
+                ))
+            case "active_sets" where metric.value > 0:
+                observations.append(AIInsightObservation(
+                    text: "Идёт активная тренировка.",
+                    evidenceKeys: ["active_sets"]
+                ))
+            case "active_tonnage" where metric.value > 0:
+                observations.append(AIInsightObservation(
+                    text: "Тоннаж в активной тренировке.",
+                    evidenceKeys: ["active_tonnage"]
+                ))
+            case "latest_weight_kg":
+                observations.append(AIInsightObservation(
+                    text: "Последнее измерение веса.",
+                    evidenceKeys: ["latest_weight_kg"]
+                ))
+            case "latest_height_cm":
+                observations.append(AIInsightObservation(
+                    text: "Последнее измерение роста.",
+                    evidenceKeys: ["latest_height_cm"]
+                ))
+            default:
+                break
+            }
+        }
+        
+        // Ограничиваем количество наблюдений
+        let limitedObservations = Array(observations.prefix(4))
+        
+        return AIInsights(
+            schemaVersion: AIInsights.currentSchemaVersion,
+            period: analysis.period,
+            summary: summary,
+            observations: limitedObservations,
+            computedMetrics: analysis.computedMetrics,
+            limitations: analysis.limitations,
+            evidence: limitedObservations.map { observation in
+                AIInsightEvidence(key: observation.evidenceKeys.first ?? "", metricKeys: observation.evidenceKeys)
+            }
+        )
+    }
 }

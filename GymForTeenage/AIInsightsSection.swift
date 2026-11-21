@@ -15,10 +15,7 @@ struct AIInsightsSection: View {
             VStack(alignment: .leading, spacing: 13) {
                 HStack(spacing: 10) {
                     Image(systemName: "sparkles").foregroundStyle(TeenTheme.violet).font(.title3)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Teenage Coach").font(.headline)
-                        Text("Insights по тренировкам").font(.caption).foregroundStyle(TeenTheme.muted)
-                    }
+                    Text("Teenage Coach").font(.headline)
                     Spacer()
                     Button { presentsChat = true } label: {
                         Image(systemName: "bubble.left.and.bubble.right")
@@ -27,9 +24,6 @@ struct AIInsightsSection: View {
                     }
                     .buttonStyle(TeenPressStyle())
                     .accessibilityLabel("Открыть чат Teenage Coach")
-                    if coordinator.state.availability == .loading {
-                        ProgressView().tint(TeenTheme.lime)
-                    }
                 }
 
                 if let insights = coordinator.state.insights, coordinator.state.availability != .disabled {

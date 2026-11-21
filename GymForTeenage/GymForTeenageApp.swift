@@ -109,7 +109,83 @@ extension Date {
 extension JSONEncoder { static var pretty:JSONEncoder {let e=JSONEncoder();e.outputFormatting=[.prettyPrinted,.sortedKeys];e.dateEncodingStrategy = .iso8601;return e} }
 extension JSONDecoder { static var iso:JSONDecoder {let d=JSONDecoder();d.dateDecodingStrategy = .iso8601;return d} }
 
-@main struct GymForTeenageApp:App { @State private var store=Store(); var body:some Scene { WindowGroup { RootView().environment(store).task { await store.scheduleAll(); while !Task.isCancelled { try? await Task.sleep(for:.seconds(60)); if !store.water.contains(where:{$0.day==store.today}) { store.rollWater() }; store.rollCreatine() } } } }
+@main struct GymForTeenageApp: App {
+    @State private var store = Store()
+    @State private var taskStore = TaskStore()
+    @State private var taskNotificationManager = TaskNotificationManager.shared
+    
+    var body: some Scene {
+        WindowGroup {
+            RootView()
+                .environment(store)
+                .environment(taskStore)
+                .task {
+                    await store.scheduleAll()
+                    while !Task.isCancelled {
+                        try? await Task.sleep(for: .seconds(60))
+                        if !store.water.contains(where: { $0.day == store.today }) {
+                            store.rollWater()
+                        }
+                        store.rollCreatine()
+                        taskStore.resetDailyCompletionStatus()
+                    }
+                }
+                .onAppear {
+                    setupNotificationDelegate()
+                }
+        }
+    }
+    
+    private func setupNotificationDelegate() {
+        let center = UNUserNotificationCenter.current()
+        center.delegate = NotificationDelegate.shared
+    }
+}
+
+class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
+    static let shared = NotificationDelegate()
+    
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                               willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
+        return [.banner, .sound]
+    }
+    
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                               didReceive response: UNNotificationResponse) async {
+        let userInfo = response.notification.request.content.userInfo
+        
+        if let taskType = userInfo["taskType"] as? String,
+           let taskIdString = userInfo["taskId"] as? String,
+           let taskId = UUID(uuidString: taskIdString) {
+            
+            // Сохраняем информацию о нажатом уведомлении для обработки в UI
+            let defaults = UserDefaults.standard
+            defaults.set(taskType, forKey: "lastOpenedNotificationTaskType")
+            defaults.set(taskIdString, forKey: "lastOpenedNotificationTaskId")
+            
+            // Для разовых задач удаляем оставшиеся уведомления
+            if taskType == "oneTime" {
+                TaskNotificationManager.shared.cancelOneTimeTaskNotifications(for: taskId)
+            }
+            
+            // Можно открыть соответствующее окно задач
+            NotificationCenter.default.post(
+                name: Notification.Name("TaskNotificationOpened"),
+                object: nil,
+                userInfo: ["taskType": taskType, "taskId": taskIdString]
+            )
+        }
+    }
+}
+
+extension TaskNotificationManager {
+    func cancelOneTimeTaskNotifications(for taskId: UUID) {
+        let center = UNUserNotificationCenter.current()
+        let identifiers = (0...11).map { "oneTime-\(taskId.uuidString)-\($0 * 5)" }
+        center.removePendingNotificationRequests(withIdentifiers: identifiers)
+        center.removeDeliveredNotifications(withIdentifiers: identifiers)
+    }
+}
 }
 struct RootView: View { var body: some View { PremiumRootView() } }
 struct Card<Content:View>:View { @ViewBuilder var content:Content; var body:some View {content.padding(16).frame(maxWidth:.infinity,alignment:.leading).background(.background, in:RoundedRectangle(cornerRadius:22,style:.continuous)).overlay(RoundedRectangle(cornerRadius:22).stroke(.quaternary,lineWidth:1)).shadow(color:.black.opacity(0.04),radius:12,y:4)} }
