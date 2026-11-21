@@ -558,32 +558,44 @@ struct PremiumStatisticsView: View {
     private var exerciseSelectionSheet: some View {
         NavigationStack {
             List {
-                Section("Все упражнения") {
-                    Button { selectedExercise = nil; showExerciseSheet = false } label: {
-                        HStack {
-                            Text("Все упражнения").foregroundStyle(.primary)
-                            Spacer()
-                            if selectedExercise == nil { Image(systemName: "checkmark").foregroundStyle(TeenTheme.lime) }
-                        }
-                    }
-                }
-                Section {
-                    ForEach(Catalog.all.filter { $0.title.localizedCaseInsensitiveContains(searchQuery) }) { ex in
-                        Button { selectedExercise = ex; showExerciseSheet = false } label: {
-                            HStack {
-                                Text(ex.title).foregroundStyle(.primary)
-                                Spacer()
-                                if selectedExercise?.id == ex.id { Image(systemName: "checkmark").foregroundStyle(TeenTheme.lime) }
-                            }
-                        }
-                    }
-                }
+                allExercisesSection
+                exercisesListSection
             }
             .scrollContentBackground(.hidden)
             .navigationTitle("Упражнение")
             .searchable(text: $searchQuery, placement: .navigationBar, prompt: "Найти упражнение")
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Отмена") { showExerciseSheet = false } } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { cancelToolbarItem } }
         }
+    }
+    
+    private var allExercisesSection: some View {
+        Section("Все упражнения") {
+            Button { selectedExercise = nil; showExerciseSheet = false } label: {
+                HStack {
+                    Text("Все упражнения").foregroundStyle(.primary)
+                    Spacer()
+                    if selectedExercise == nil { Image(systemName: "checkmark").foregroundStyle(TeenTheme.lime) }
+                }
+            }
+        }
+    }
+    
+    private var exercisesListSection: some View {
+        Section {
+            ForEach(Catalog.all.filter { $0.title.localizedCaseInsensitiveContains(searchQuery) }) { ex in
+                Button { selectedExercise = ex; showExerciseSheet = false } label: {
+                    HStack {
+                        Text(ex.title).foregroundStyle(.primary)
+                        Spacer()
+                        if selectedExercise?.id == ex.id { Image(systemName: "checkmark").foregroundStyle(TeenTheme.lime) }
+                    }
+                }
+            }
+        }
+    }
+    
+    private var cancelToolbarItem: some ToolbarItemContent {
+        ToolbarItem(placement: .cancellationAction) { Button("Отмена") { showExerciseSheet = false } }
     }
     private var metricPicker: some View {
         Picker("Показатель", selection: $selectedMetric) {

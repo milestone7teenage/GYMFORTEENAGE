@@ -42,7 +42,7 @@ enum AIConfiguration {
     
     static var currentProvider: AIProvider {
         get {
-            guard let rawValue = storedProvider, let provider = AIProvider(rawValue: rawValue) else { return .googleGemini }
+            guard let provider = AIProvider(rawValue: storedProvider) else { return .googleGemini }
             return provider
         }
         set {
