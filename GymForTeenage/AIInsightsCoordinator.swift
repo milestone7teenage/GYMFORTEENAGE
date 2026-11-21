@@ -345,8 +345,8 @@ final class AIInsightsCoordinator {
             return
         }
         guard requiredConsentCategories.isSubset(of: consentedCategories) else {
-            // При отсутствии согласия показываем локальную сводку
-            state = AIInsightsViewState(availability: .ready, insights: localInsights, isStale: false, message: "Локально рассчитанная сводка (отправка данных не подтверждена).")
+            // При отсутствии согласия не запрашиваем API и не перезаписываем состояние локальной сводкой
+            state = AIInsightsViewState(availability: .consentRequired, insights: previousInsights, isStale: previousInsights != nil, message: "Перед анализом нужно отдельно подтвердить отправку недельных показателей.")
             return
         }
 
