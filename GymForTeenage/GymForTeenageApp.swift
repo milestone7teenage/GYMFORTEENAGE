@@ -40,7 +40,13 @@ enum Catalog {
  func rollCreatine(){ let today=Self.dayKey(Date()); if creatineLog[today] == nil { creatineLog[today] = false }; save() }
  nonisolated static func parseDay(_ s:String)->Date? { let f=DateFormatter();f.dateFormat="yyyy-MM-dd";f.timeZone = .current;return f.date(from:s) }
  func addWater(){ guard todayML<3000 else{return}; if let i=water.firstIndex(where:{$0.day==today}){water[i].ml=min(3000,water[i].ml+200)}; UIImpactFeedbackGenerator(style:.soft).impactOccurred();save() }
- func current(_ workout:Training)->Session { if let s=session { return s }; let s=Session(workoutID:workout.id,exercises:workout.exercises.enumerated().map{ExerciseLog(slotID:"\(workout.id)-\($0.offset)",exerciseID:$0.element.id,actualID:$0.element.id)});session=s;save();return s }
+ func current(_ workout:Training)->Session { 
+    if let s=session, s.workoutID == workout.id { return s }
+    let s=Session(workoutID:workout.id,exercises:workout.exercises.enumerated().map{ExerciseLog(slotID:"\(workout.id)-\($0.offset)",exerciseID:$0.element.id,actualID:$0.element.id)})
+    session=s
+    save()
+    return s 
+  }
  func mutate(_ body:(inout Session)->Void){ guard var s=session else{return};body(&s);session=s;save() }
  func finish(){ guard let s=session,let w=Catalog.workouts.first(where:{$0.id==s.workoutID}) else{return};records.insert(.init(workoutID:w.id,name:w.title,date:Date(),exercises:s.exercises),at:0);session=nil;save() }
  func recoverExercise(at index:Int){ guard let s=session, index>=0, index<s.exercises.count, s.exercises[index].status=="skipped" else { return }; mutate { state in state.exercises[index].status="pending"; state.current=index } }

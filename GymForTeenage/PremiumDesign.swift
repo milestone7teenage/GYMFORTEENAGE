@@ -60,12 +60,16 @@ struct TeenSectionTitle: View {
     let detail: String?
     init(_ title: String, detail: String? = nil) { self.title = title; self.detail = detail }
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(title).font(.system(.title3, design: .rounded, weight: .bold))
-            Spacer()
-            if let detail { Text(detail).font(.caption.weight(.medium)).foregroundStyle(TeenTheme.muted) }
+        if let detail {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title).font(.system(.title3, design: .rounded, weight: .bold))
+                Spacer()
+                Text(detail).font(.caption.weight(.medium)).foregroundStyle(TeenTheme.muted)
+            }
+            .padding(.horizontal, 2)
+        } else {
+            Text(title).font(.system(.title3, design: .rounded, weight: .bold)).multilineTextAlignment(.center)
         }
-        .padding(.horizontal, 2)
     }
 }
 

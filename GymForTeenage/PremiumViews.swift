@@ -70,11 +70,11 @@ struct PremiumHomeView: View {
                 VStack(spacing: 18) {
                     header
                     HStack(spacing: 12) { measureCard("Вес", unit: "кг", kind: "weight", icon: "scalemass.fill", tint: TeenTheme.violet); measureCard("Рост", unit: "см", kind: "height", icon: "ruler.fill", tint: TeenTheme.ice) }
-                    TeenSectionTitle("тренировки", detail: store.hasRealActiveWorkout ? "есть активная" : "3 программы")
+                    TeenSectionTitle("тренировки")
                     workoutCarousel
-                    TeenSectionTitle("вода сегодня", detail: "цель 3 000 мл")
+                    TeenSectionTitle("вода сегодня")
                     waterCard
-                    TeenSectionTitle("креатин сегодня", detail: "ежедневная отметка")
+                    TeenSectionTitle("креатин")
                     creatineCard
                 }
                 .padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 112)
@@ -141,15 +141,14 @@ struct PremiumHomeView: View {
     }
     private var header: some View {
         HStack(alignment: .bottom) {
-            VStack(alignment: .leading, spacing: 4) { Text("teenage").font(.system(size: 34, weight: .bold, design: .rounded)); Text("Твой темп. Твоя сила.").font(.subheadline).foregroundStyle(TeenTheme.muted) }
+            Text("teenage").font(.system(size: 34, weight: .bold, design: .rounded))
             Spacer()
-            Button { kind = "weight"; value = ""; showMeasure = true } label: { Image(systemName: "plus").font(.headline).frame(width: 42, height: 42).background(TeenTheme.raised, in: Circle()).overlay(Circle().stroke(TeenTheme.line)) }.buttonStyle(TeenPressStyle())
         }
     }
     private func latest(_ kind: String) -> Measure? { store.measures.filter { $0.kind == kind }.max { $0.date < $1.date } }
     private func measureCard(_ title: String, unit: String, kind: String, icon: String, tint: Color) -> some View {
         Button { self.kind = kind; value = ""; showMeasure = true } label: {
-            TeenCard(accent: tint) {
+            TeenCard {
                 HStack(spacing: 12) {
                     Image(systemName: icon).foregroundStyle(tint).font(.title3)
                     VStack(alignment: .leading, spacing: 3) {
@@ -165,36 +164,36 @@ struct PremiumHomeView: View {
     private func workoutCard(_ workout: Training, isSelected: Bool = false) -> some View {
         let active = store.hasRealActiveWorkout && store.session?.workoutID == workout.id
         return NavigationLink { PremiumWorkoutView(workout: workout) } label: {
-            TeenCard(accent: active ? TeenTheme.lime : (isSelected ? TeenTheme.violet : nil)) {
+            TeenCard {
                 HStack(spacing: 14) {
                     Text(workout.id.replacingOccurrences(of: "w", with: "0")).font(.system(.title2, design: .rounded, weight: .bold)).foregroundStyle(active ? TeenTheme.lime : (isSelected ? TeenTheme.violet : .white)).frame(width: 42, height: 42).background((active ? TeenTheme.lime : (isSelected ? TeenTheme.violet : .white)).opacity(0.13), in: Circle())
-                    VStack(alignment: .leading, spacing: 5) { Text(workout.title).font(.headline); Text(active ? "Продолжить незавершённую тренировку" : "\(workout.exercises.count) упражнений").font(.caption).foregroundStyle(TeenTheme.muted) }
+                    Text(workout.title).font(.headline)
                     Spacer(); Image(systemName: active ? "arrow.clockwise" : "arrow.up.right").font(.headline).foregroundStyle(active ? TeenTheme.lime : .white)
                 }
             }
         }.buttonStyle(TeenPressStyle())
     }
     private var waterCard: some View {
-        TeenCard(accent: TeenTheme.ice) {
-            HStack(spacing: 18) {
-                ZStack { Circle().stroke(TeenTheme.raised, lineWidth: 10); Circle().trim(from: 0, to: waterProgress).stroke(TeenTheme.ice, style: StrokeStyle(lineWidth: 10, lineCap: .round)).rotationEffect(.degrees(-90)).animation(.easeInOut(duration: 0.35), value: waterProgress); VStack(spacing: 1) { Text("\(store.todayML)").font(.system(.title3, design: .rounded, weight: .bold)).monospacedDigit(); Text("мл").font(.caption2).foregroundStyle(TeenTheme.muted) } }.frame(width: 104, height: 104)
-                VStack(alignment: .leading, spacing: 9) { Text("Держи ритм").font(.headline); Text("Осталось \(max(0, 3000 - store.todayML)) мл до цели").font(.caption).foregroundStyle(TeenTheme.muted); Button { store.addWater() } label: { Label("+ 200 мл", systemImage: "drop.fill").font(.subheadline.weight(.bold)).foregroundStyle(TeenTheme.ink).padding(.horizontal, 14).padding(.vertical, 10).background(TeenTheme.ice, in: Capsule()) }.disabled(store.todayML >= 3000).buttonStyle(TeenPressStyle()) }
+        TeenCard {
+            VStack(spacing: 14) {
+                Text("Вода сегодня").font(.headline).multilineTextAlignment(.center)
+                ZStack { Circle().stroke(TeenTheme.raised, lineWidth: 10); Circle().trim(from: 0, to: waterProgress).stroke(TeenTheme.ice, style: StrokeStyle(lineWidth: 10, lineCap: .round)).rotationEffect(.degrees(-90)).animation(.easeInOut(duration: 0.35), value: waterProgress); VStack(spacing: 1) { Text("\(store.todayML)").font(.system(.title3, design: .rounded, weight: .bold)).monospacedDigit(); Text("мл").font(.caption2).foregroundStyle(TeenTheme.muted) } }.frame(width: 90, height: 90)
+                Button { store.addWater() } label: { Label("+ 200 мл", systemImage: "drop.fill").font(.subheadline.weight(.bold)).foregroundStyle(TeenTheme.ink).padding(.horizontal, 16).padding(.vertical, 10).background(TeenTheme.ice, in: Capsule()) }.disabled(store.todayML >= 3000).buttonStyle(TeenPressStyle())
             }
         }
     }
     private var creatineCard: some View {
-        TeenCard(accent: store.todayCreatine ? TeenTheme.lime : TeenTheme.raised) {
+        TeenCard {
             HStack(spacing: 14) {
                 ZStack {
-                    Circle().stroke(store.todayCreatine ? TeenTheme.lime : TeenTheme.raised, lineWidth: 2)
-                    Image(systemName: store.todayCreatine ? "checkmark" : "pill")
-                        .foregroundStyle(store.todayCreatine ? TeenTheme.ink : TeenTheme.muted)
+                    Circle().stroke(TeenTheme.ice, lineWidth: 2)
+                    Image(systemName: store.todayCreatine ? "checkmark.circle.fill" : "drop.circle.fill")
+                        .foregroundStyle(store.todayCreatine ? TeenTheme.ice : TeenTheme.muted)
                         .font(.title3)
                 }
                 .frame(width: 44, height: 44)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Принять креатин").font(.subheadline.weight(.semibold))
-                    Text(store.todayCreatine ? "Сегодня отмечено" : "Не отмечено").font(.caption2).foregroundStyle(TeenTheme.muted)
+                    Text("Креатин").font(.subheadline.weight(.semibold))
                 }
                 Spacer()
                 Button {
@@ -203,12 +202,11 @@ struct PremiumHomeView: View {
                     }
                 } label: {
                     Image(systemName: store.todayCreatine ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(store.todayCreatine ? TeenTheme.lime : TeenTheme.muted)
+                        .foregroundStyle(store.todayCreatine ? TeenTheme.ice : TeenTheme.muted)
                         .font(.title2)
                 }
                 .buttonStyle(TeenPressStyle())
             }
-            .padding(.vertical, 4)
         }
     }
     private var measureSheet: some View {
@@ -223,7 +221,7 @@ struct PremiumWorkoutView: View {
     var body: some View {
         let session = store.current(workout)
         ScrollView { VStack(spacing: 14) {
-            TeenCard(accent: TeenTheme.lime) { HStack { VStack(alignment: .leading, spacing: 5) { Text(workout.title).font(.title2.bold()); Text("\(session.exercises.filter { $0.status == "completed" }.count) из \(session.exercises.count) упражнений").foregroundStyle(TeenTheme.muted).font(.caption) }; Spacer(); ZStack { Circle().stroke(TeenTheme.raised, lineWidth: 6); Circle().trim(from: 0, to: Double(session.exercises.filter { $0.status == "completed" || $0.status == "skipped" }.count) / Double(session.exercises.count)).stroke(TeenTheme.lime, style: StrokeStyle(lineWidth: 6, lineCap: .round)).rotationEffect(.degrees(-90)); Text("\(session.current + 1)").font(.headline) }.frame(width: 50, height: 50) } }
+            TeenCard { HStack { VStack(alignment: .leading, spacing: 5) { Text(workout.title).font(.title2.bold()); Text("\(session.exercises.filter { $0.status == "completed" }.count) из \(session.exercises.count) упражнений").foregroundStyle(TeenTheme.muted).font(.caption) }; Spacer(); ZStack { Circle().stroke(TeenTheme.raised, lineWidth: 6); Circle().trim(from: 0, to: Double(session.exercises.filter { $0.status == "completed" || $0.status == "skipped" }.count) / Double(session.exercises.count)).stroke(TeenTheme.ice, style: StrokeStyle(lineWidth: 6, lineCap: .round)).rotationEffect(.degrees(-90)); Text("\(session.current + 1)").font(.headline) }.frame(width: 50, height: 50) } }
             if session.exercises.contains(where: { $0.status == "skipped" }) {
                 Button { showRecovery = true } label: {
                     HStack {
@@ -248,7 +246,7 @@ struct PremiumWorkoutView: View {
             Button("Отмена", role: .cancel) {}
         } message: { Text("Упражнение вернётся на своё место в тренировке, все значения сохранятся.") }
     }
-    private func exerciseRow(_ entry: ExerciseLog, index: Int) -> some View { TeenCard(accent: entry.status == "completed" ? TeenTheme.lime : nil) { HStack(spacing: 13) { Image(uiImage: exerciseUIImage(Catalog.e(entry.actualID).image)).resizable().scaledToFill().frame(width: 54, height: 54).clipShape(Circle()); VStack(alignment: .leading, spacing: 4) { Text(Catalog.e(entry.actualID).title).font(.subheadline.weight(.semibold)); Text(entry.status == "skipped" ? "Пропущено" : "Упражнение \(index + 1)").font(.caption).foregroundStyle(entry.status == "skipped" ? .red : TeenTheme.muted) }; Spacer(); Image(systemName: entry.status == "completed" ? "checkmark.circle.fill" : "chevron.right").foregroundStyle(entry.status == "completed" ? TeenTheme.lime : TeenTheme.muted) } } }
+    private func exerciseRow(_ entry: ExerciseLog, index: Int) -> some View { TeenCard { HStack(spacing: 13) { Image(uiImage: exerciseUIImage(Catalog.e(entry.actualID).image)).resizable().scaledToFill().frame(width: 54, height: 54).clipShape(Circle()); VStack(alignment: .leading, spacing: 4) { Text(Catalog.e(entry.actualID).title).font(.subheadline.weight(.semibold)); Text(entry.status == "skipped" ? "Пропущено" : "Упражнение \(index + 1)").font(.caption).foregroundStyle(entry.status == "skipped" ? .red : TeenTheme.muted) }; Spacer(); Image(systemName: entry.status == "completed" ? "checkmark.circle.fill" : "chevron.right").foregroundStyle(entry.status == "completed" ? TeenTheme.ice : TeenTheme.muted) } } }
 }
 
 struct PremiumExerciseView: View {
@@ -312,12 +310,12 @@ struct PremiumExerciseView: View {
                 Button("ОК", role: .cancel) {}
             } message: { Text("Вы можете вернуть это упражнение позже в списке тренировки") }
     }
-    private func hero(_ exercise: Exercise, session: Session) -> some View { TeenCard(accent: TeenTheme.lime) { VStack(spacing: 12) { ZStack { Circle().stroke(TeenTheme.raised, lineWidth: 6); Circle().trim(from: 0, to: Double(index + 1) / Double(session.exercises.count)).stroke(TeenTheme.lime, style: StrokeStyle(lineWidth: 6, lineCap: .round)).rotationEffect(.degrees(-90)); Image(uiImage: exerciseUIImage(exercise.image)).resizable().scaledToFill().frame(width: 92, height: 92).clipShape(Circle()) }.frame(width: 108, height: 108); Text(exercise.title.uppercased()).font(.headline).multilineTextAlignment(.center); Text("Тренировка · упражнение \(index + 1)").font(.caption).foregroundStyle(TeenTheme.muted) } .frame(maxWidth: .infinity) } }
+    private func hero(_ exercise: Exercise, session: Session) -> some View { TeenCard { VStack(spacing: 12) { ZStack { Circle().stroke(TeenTheme.raised, lineWidth: 6); Circle().trim(from: 0, to: Double(index + 1) / Double(session.exercises.count)).stroke(TeenTheme.ice, style: StrokeStyle(lineWidth: 6, lineCap: .round)).rotationEffect(.degrees(-90)); Image(uiImage: exerciseUIImage(exercise.image)).resizable().scaledToFill().frame(width: 92, height: 92).clipShape(Circle()) }.frame(width: 108, height: 108); Text(exercise.title.uppercased()).font(.headline).multilineTextAlignment(.center); Text("Тренировка · упражнение \(index + 1)").font(.caption).foregroundStyle(TeenTheme.muted) } .frame(maxWidth: .infinity) } }
     private func setCard(_ entry: ExerciseLog) -> some View { TeenCard { VStack(alignment: .leading, spacing: 12) { TeenSectionTitle("подходы", detail: "вес · повторы"); ForEach(entry.sets.indices, id: \.self) { row in setRow(entry.sets[row], row: row) }; HStack { Button { store.mutate { $0.exercises[index].sets.append(SetLog()) } } label: { Label("Подход", systemImage: "plus").font(.subheadline.weight(.bold)).foregroundStyle(TeenTheme.lime) }; Spacer(); if entry.sets.count > 2 { Button("Удалить") { store.mutate { $0.exercises[index].sets.removeLast() } }.foregroundStyle(.red).font(.caption) } } } } }
     private func setRow(_ set: SetLog, row: Int) -> some View { HStack(spacing: 8) { Text("\(row + 1)").font(.caption.weight(.bold)).frame(width: 30, height: 30).background(set.skipped ? Color.red.opacity(0.16) : TeenTheme.lime.opacity(0.12), in: Circle()).foregroundStyle(set.skipped ? .red : TeenTheme.lime); TextField("кг", text: Binding(get: { set.weight }, set: { value in store.mutate { s in s.exercises[index].sets[row].weight = value; if row == 0 && s.exercises[index].sets.count > 1 && s.exercises[index].sets[1].weight.isEmpty { s.exercises[index].sets[1].weight = value } } })).keyboardType(.decimalPad).multilineTextAlignment(.center).padding(10).background(TeenTheme.raised, in: Capsule()); TextField("раз", text: Binding(get: { set.reps }, set: { value in store.mutate { $0.exercises[index].sets[row].reps = value } })).keyboardType(.numberPad).multilineTextAlignment(.center).padding(10).background(TeenTheme.raised, in: Capsule()); Button { store.mutate { $0.exercises[index].sets[row].skipped.toggle() } } label: { Image(systemName: set.skipped ? "xmark" : "checkmark").font(.caption.weight(.bold)).frame(width: 34, height: 34).foregroundStyle(set.skipped ? .red : TeenTheme.lime).background((set.skipped ? Color.red : TeenTheme.lime).opacity(0.14), in: Circle()) } } }
     private func actionRow(_ entry: ExerciseLog) -> some View { HStack(spacing: 10) { Button { replace = true } label: { action("Заменить", icon: "arrow.triangle.2.circlepath") }; NavigationLink { PremiumHistoryView(exerciseID: entry.exerciseID) } label: { action("История", icon: "clock.arrow.circlepath") } } }
     private func action(_ text: String, icon: String) -> some View { VStack(spacing: 6) { Image(systemName: icon); Text(text).font(.caption2.weight(.semibold)) }.foregroundStyle(.white).frame(maxWidth: .infinity).padding(.vertical, 12).background(TeenTheme.surface, in: RoundedRectangle(cornerRadius: 16)).overlay(RoundedRectangle(cornerRadius: 16).stroke(TeenTheme.line)) }
-    private func notes(_ entry: ExerciseLog) -> some View { TeenCard(accent: TeenTheme.lime) { VStack(alignment: .leading, spacing: 8) { Text("Техника выполнения").font(.headline); TextEditor(text: Binding(get: { store.instructions[entry.exerciseID] ?? TechniqueGuide.instruction(for: entry.exerciseID) }, set: { store.instructions[entry.exerciseID] = $0; store.save() })).scrollContentBackground(.hidden).frame(minHeight: 150).padding(6).background(TeenTheme.raised, in: RoundedRectangle(cornerRadius: 14)); Text("Подсказка для безопасного выполнения. Выбирай комфортный вес и диапазон движения.").font(.caption2).foregroundStyle(TeenTheme.muted) } } }
+    private func notes(_ entry: ExerciseLog) -> some View { TeenCard { VStack(alignment: .leading, spacing: 8) { Text("Техника выполнения").font(.headline); TextEditor(text: Binding(get: { store.instructions[entry.exerciseID] ?? TechniqueGuide.instruction(for: entry.exerciseID) }, set: { store.instructions[entry.exerciseID] = $0; store.save() })).scrollContentBackground(.hidden).frame(minHeight: 150).padding(6).background(TeenTheme.raised, in: RoundedRectangle(cornerRadius: 14)); Text("Подсказка для безопасного выполнения. Выбирай комфортный вес и диапазон движения.").font(.caption2).foregroundStyle(TeenTheme.muted) } } }
     private func history(_ entry: ExerciseLog) -> some View {
         let latest = store.exerciseHistory(for: entry.exerciseID).first
         return TeenCard {
@@ -374,21 +372,18 @@ struct PremiumProgressView: View {
             }
         }.frame(maxWidth: .infinity).padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 112) }.toolbar(.hidden, for: .navigationBar) }
     }
-    private var header: some View { HStack { VStack(alignment: .leading, spacing: 4) { Text("прогресс").font(.system(.largeTitle, design: .rounded, weight: .bold)); Text("История твоих тренировок").font(.subheadline).foregroundStyle(TeenTheme.muted) }; Spacer(); Image(systemName: "list.bullet.rectangle.fill").font(.title3).foregroundStyle(TeenTheme.lime).frame(width: 42, height: 42).background(TeenTheme.surface, in: Circle()) } }
+    private var header: some View { Text("прогресс").font(.system(.largeTitle, design: .rounded, weight: .bold)).multilineTextAlignment(.center) }
     private func workoutHistoryCard(_ record: Record) -> some View {
         let nonSkippedExercises = record.exercises.filter { $0.status != "skipped" }
         let completed = nonSkippedExercises.filter { exercise in
             exercise.sets.contains { !$0.skipped && !$0.weight.isEmpty && !$0.reps.isEmpty }
         }
         let skipped = record.exercises.filter { $0.status == "skipped" }
-        let sets = completed.reduce(0) { $0 + $1.sets.filter { !$0.skipped && !$0.weight.isEmpty && !$0.reps.isEmpty }.count }
-        return TeenCard(accent: TeenTheme.violet) { HStack(spacing: 14) {
-            Image(systemName: "figure.strengthtraining.traditional").font(.title2).foregroundStyle(TeenTheme.lime).frame(width: 48, height: 48).background(TeenTheme.lime.opacity(0.12), in: Circle())
+        return TeenCard { HStack(spacing: 14) {
+            Image(systemName: "figure.strengthtraining.traditional").font(.title2).foregroundStyle(TeenTheme.violet).frame(width: 48, height: 48).background(TeenTheme.violet.opacity(0.12), in: Circle())
             VStack(alignment: .leading, spacing: 4) {
                 Text(record.name).font(.headline)
                 Text(record.date.ruLong).font(.caption).foregroundStyle(TeenTheme.muted)
-                Text("\(completed.count) упражнений · \(sets) подходов").font(.caption.weight(.semibold))
-                if !skipped.isEmpty { Text("+ \(skipped.count) пропущено").font(.caption2).foregroundStyle(.red) }
             }
             Spacer()
             Image(systemName: "chevron.right").font(.caption).foregroundStyle(TeenTheme.muted)
@@ -434,14 +429,9 @@ struct PremiumWorkoutDetailScreen: View {
     private var skipped: [ExerciseLog] { record.exercises.filter { $0.status == "skipped" } }
     private var totalSets: Int { completedExercises.reduce(0) { $0 + $1.sets.filter { !$0.skipped && !$0.weight.isEmpty && !$0.reps.isEmpty }.count } }
     private var headerCard: some View {
-        TeenCard(accent: TeenTheme.lime) { VStack(alignment: .leading, spacing: 6) {
+        TeenCard { VStack(alignment: .leading, spacing: 6) {
             Text(record.name).font(.title2.bold())
             Text(record.date.ruLong).font(.subheadline).foregroundStyle(TeenTheme.muted)
-            HStack(spacing: 8) {
-                TeenPill(title: "\(completedExercises.count) упражнений", tint: TeenTheme.lime)
-                if !skipped.isEmpty { TeenPill(title: "\(skipped.count) пропущено", tint: .red) }
-                TeenPill(title: "\(totalSets) подходов", tint: TeenTheme.ice)
-            }
         } }
     }
     private func exerciseDetail(_ log: ExerciseLog) -> some View {
@@ -450,8 +440,6 @@ struct PremiumWorkoutDetailScreen: View {
             HStack(spacing: 10) {
                 Image(uiImage: exerciseUIImage(Catalog.e(log.actualID).image)).resizable().scaledToFill().frame(width: 40, height: 40).clipShape(Circle())
                 Text(Catalog.e(log.actualID).title).font(.headline)
-                Spacer()
-                TeenPill(title: "\(working.count) подх.", tint: TeenTheme.lime)
             }
             ForEach(working, id: \.offset) { i, set in
                 HStack(spacing: 8) {
@@ -480,6 +468,7 @@ struct PremiumStatisticsView: View {
     @Environment(Store.self) private var store
     @State private var selectedExercise: Exercise?
     @State private var selectedMetric: MetricType = .weight
+    @State private var showExerciseSheet = false
     enum MetricType: String, CaseIterable { case weight = "Вес", tonnage = "Тоннаж", sets = "Подходы" }
     var body: some View {
         NavigationStack { ScrollView(showsIndicators: false) { VStack(spacing: 16) {
@@ -498,26 +487,32 @@ struct PremiumStatisticsView: View {
             measureChart(kind: "height", title: "рост", tint: TeenTheme.ice)
         }.frame(maxWidth: .infinity).padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 112) }.toolbar(.hidden, for: .navigationBar) }
     }
-    private var header: some View { HStack { VStack(alignment: .leading, spacing: 4) { Text("статистика").font(.system(.largeTitle, design: .rounded, weight: .bold)); Text("Аналитика по упражнениям").font(.subheadline).foregroundStyle(TeenTheme.muted) }; Spacer() } }
+    private var header: some View { Text("статистика").font(.system(.largeTitle, design: .rounded, weight: .bold)).multilineTextAlignment(.center) }
     private var exerciseSelector: some View {
-        let all = Catalog.all
-        return TeenCard(accent: TeenTheme.violet) { VStack(alignment: .leading, spacing: 10) {
+        let currentTitle = selectedExercise.map { $0.title } ?? "Все упражнения"
+        return TeenCard { VStack(alignment: .leading, spacing: 10) {
             TeenSectionTitle("упражнение")
-            ScrollView(.horizontal, showsIndicators: false) { HStack(spacing: 8) {
-                Button { selectedExercise = nil } label: {
-                    Text("Все").font(.caption.weight(.semibold)).padding(.horizontal, 12).padding(.vertical, 6)
-                        .background(selectedExercise == nil ? TeenTheme.violet : TeenTheme.raised, in: Capsule())
-                        .foregroundStyle(selectedExercise == nil ? TeenTheme.ink : .white)
-                }.buttonStyle(TeenPressStyle())
-                ForEach(all) { ex in
-                    Button { selectedExercise = ex } label: {
-                        Text(ex.title).font(.caption.weight(.semibold)).padding(.horizontal, 12).padding(.vertical, 6)
-                            .background(selectedExercise?.id == ex.id ? TeenTheme.violet : TeenTheme.raised, in: Capsule())
-                            .foregroundStyle(selectedExercise?.id == ex.id ? TeenTheme.ink : .white)
-                    }.buttonStyle(TeenPressStyle())
+            Button {
+                showExerciseSheet = true
+            } label: {
+                HStack {
+                    Text(currentTitle).font(.subheadline.weight(.semibold)).foregroundStyle(.white)
+                    Spacer()
+                    Image(systemName: "chevron.down").font(.caption).foregroundStyle(TeenTheme.muted)
                 }
-            } }
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity)
+                .background(TeenTheme.ink.opacity(0.5), in: Capsule())
+            }.buttonStyle(TeenPressStyle())
         } }
+        .sheet(isPresented: $showExerciseSheet) {
+            exerciseSelectionSheet
+        }
+    }
+    private var exerciseSelectionSheet: some View {
+        NavigationStack { List { Button { selectedExercise = nil; showExerciseSheet = false } label: { Text("Все упражнения") } }
+            ForEach(Catalog.all) { ex in Button { selectedExercise = ex; showExerciseSheet = false } label: { Text(ex.title) } }
+        }.navigationTitle("Упражнение").toolbar { ToolbarItem(placement: .cancellationAction) { Button("Отмена") { showExerciseSheet = false } } }
     }
     private var metricPicker: some View {
         Picker("Показатель", selection: $selectedMetric) {
@@ -532,7 +527,7 @@ struct PremiumStatisticsView: View {
     }
     private func chartSection(for exercise: Exercise) -> some View {
         let history = store.exerciseHistory(for: exercise.id)
-        return TeenCard(accent: TeenTheme.violet) { VStack(alignment: .leading, spacing: 12) {
+        return TeenCard { VStack(alignment: .leading, spacing: 12) {
             TeenSectionTitle("прогрессия", detail: selectedMetric.rawValue.lowercased())
             if history.isEmpty {
                 Text("Нет выполнений").font(.caption).foregroundStyle(TeenTheme.muted)
@@ -586,11 +581,11 @@ struct PremiumStatisticsView: View {
     }
     private var waterSection: some View {
         let days = waterDays()
-        return TeenCard(accent: TeenTheme.ice) { VStack(alignment: .leading, spacing: 12) { TeenSectionTitle("вода", detail: "7 дней"); Chart(days, id: \.day) { day in BarMark(x: .value("День", String(day.day.suffix(2))), y: .value("Мл", day.ml)).foregroundStyle(day.day == store.today ? TeenTheme.ice : TeenTheme.ice.opacity(0.35)).cornerRadius(5).annotation(position: .top) { if day.ml > 0 { Text("\(day.ml)").font(.caption2).foregroundStyle(TeenTheme.muted) } } }.frame(maxWidth: .infinity).frame(height: 170).chartYAxis { AxisMarks(position: .leading) } } }
+        return TeenCard { VStack(alignment: .leading, spacing: 12) { TeenSectionTitle("вода", detail: "7 дней"); Chart(days, id: \.day) { day in BarMark(x: .value("День", String(day.day.suffix(2))), y: .value("Мл", day.ml)).foregroundStyle(day.day == store.today ? TeenTheme.ice : TeenTheme.ice.opacity(0.35)).cornerRadius(5).annotation(position: .top) { if day.ml > 0 { Text("\(day.ml)").font(.caption2).foregroundStyle(TeenTheme.muted) } } }.frame(maxWidth: .infinity).frame(height: 170).chartYAxis { AxisMarks(position: .leading) } } }
     }
     private func measureChart(kind: String, title: String, tint: Color) -> some View {
         let values = store.measures.filter { $0.kind == kind && $0.date >= Calendar.current.date(byAdding: .month, value: -12, to: Date())! }.sorted { $0.date < $1.date }
-        return TeenCard(accent: tint) { VStack(alignment: .leading, spacing: 12) { TeenSectionTitle(title, detail: "12 месяцев"); if values.isEmpty { TeenEmpty(icon: kind == "weight" ? "scalemass" : "ruler", title: "Нет измерений", detail: "Добавь \(title), чтобы увидеть настоящую динамику.") } else { Chart(values) { value in AreaMark(x: .value("Дата", value.date), y: .value("Значение", value.value)).foregroundStyle(LinearGradient(colors: [tint.opacity(0.35), .clear], startPoint: .top, endPoint: .bottom)); LineMark(x: .value("Дата", value.date), y: .value("Значение", value.value)).foregroundStyle(tint).lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round)); PointMark(x: .value("Дата", value.date), y: .value("Значение", value.value)).foregroundStyle(tint) }.frame(maxWidth: .infinity).frame(height: 170).chartXAxis { AxisMarks { value in if let date = value.as(Date.self) { AxisValueLabel { Text(date.ruShort) } } } }.chartYAxis { AxisMarks(position: .leading) } } } }
+        return TeenCard { VStack(alignment: .leading, spacing: 12) { TeenSectionTitle(title, detail: "12 месяцев"); if values.isEmpty { TeenEmpty(icon: kind == "weight" ? "scalemass" : "ruler", title: "Нет измерений", detail: "Добавь \(title), чтобы увидеть настоящую динамику.") } else { Chart(values) { value in AreaMark(x: .value("Дата", value.date), y: .value("Значение", value.value)).foregroundStyle(LinearGradient(colors: [tint.opacity(0.35), .clear], startPoint: .top, endPoint: .bottom)); LineMark(x: .value("Дата", value.date), y: .value("Значение", value.value)).foregroundStyle(tint).lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round)); PointMark(x: .value("Дата", value.date), y: .value("Значение", value.value)).foregroundStyle(tint) }.frame(maxWidth: .infinity).frame(height: 170).chartXAxis { AxisMarks { value in if let date = value.as(Date.self) { AxisValueLabel { Text(date.ruShort) } } } }.chartYAxis { AxisMarks(position: .leading) } } } }
     }
 }
 
@@ -618,16 +613,25 @@ struct PremiumSettingsView: View {
     @State private var confirmClear = false
     @State private var message: String?
     @State private var presentsAIConsent = false
+    @State private var isAISettingsExpanded = false
     var body: some View {
         NavigationStack { ScrollView(showsIndicators: false) { VStack(spacing: 16) {
             HStack { VStack(alignment: .leading, spacing: 4) { Text("настройки").font(.system(.largeTitle, design: .rounded, weight: .bold)); Text("Данные остаются на устройстве").font(.subheadline).foregroundStyle(TeenTheme.muted) }; Spacer() }
-            TeenSectionTitle("AI-помощник")
-            aiSettingsCard
+            Button {
+                withAnimation { isAISettingsExpanded.toggle() }
+            } label: {
+                HStack {
+                    TeenSectionTitle("AI-помощник")
+                    Spacer()
+                    Image(systemName: isAISettingsExpanded ? "chevron.up" : "chevron.down").font(.caption).foregroundStyle(TeenTheme.muted)
+                }
+            }.buttonStyle(TeenPressStyle())
+            if isAISettingsExpanded { aiSettingsCard }
             TeenSectionTitle("данные")
-            TeenCard(accent: TeenTheme.ice) { VStack(spacing: 2) { settingButton("Экспорт JSON", detail: "Создать полную резервную копию", icon: "square.and.arrow.up", tint: TeenTheme.ice) { shareURL = store.export(); if shareURL == nil { message = "Не удалось создать копию" } }; divider; settingButton("Импорт копии", detail: "Выбрать JSON-файл", icon: "square.and.arrow.down", tint: TeenTheme.violet) { importing = true }; divider; settingButton("Вставить копию из буфера", detail: "Импортировать скопированный JSON", icon: "doc.on.clipboard", tint: TeenTheme.lime) { importClipboard() }; divider; settingButton("Очистить все данные", detail: "История, вода и незавершённая тренировка", icon: "trash", tint: .red) { confirmClear = true } } }
+            TeenCard { VStack(spacing: 2) { settingButton("Экспорт JSON", detail: "Создать полную резервную копию", icon: "square.and.arrow.up", tint: TeenTheme.ice) { shareURL = store.export(); if shareURL == nil { message = "Не удалось создать копию" } }; divider; settingButton("Импорт копии", detail: "Выбрать JSON-файл", icon: "square.and.arrow.down", tint: TeenTheme.violet) { importing = true }; divider; settingButton("Вставить копию из буфера", detail: "Импортировать скопированный JSON", icon: "doc.on.clipboard", tint: TeenTheme.lime) { importClipboard() }; divider; settingButton("Очистить все данные", detail: "История, вода и незавершённая тренировка", icon: "trash", tint: .red) { confirmClear = true } } }
             TeenSectionTitle("напоминания")
-            TeenCard(accent: TeenTheme.lime) { HStack(spacing: 13) { Image(systemName: "drop.badge.clock").foregroundStyle(TeenTheme.lime).font(.title3).frame(width: 38, height: 38).background(TeenTheme.lime.opacity(0.12), in: Circle()); VStack(alignment: .leading, spacing: 4) { Text("Вода").font(.headline); Text("Каждые 2 часа · 09:00–23:00").font(.caption).foregroundStyle(TeenTheme.muted) }; Spacer(); Toggle("Вода", isOn: Binding(get: { store.reminders }, set: { store.reminders = $0; store.save(); Task { await store.schedule() } })).labelsHidden().tint(TeenTheme.lime) } }
-            TeenCard(accent: TeenTheme.violet) { HStack(spacing: 13) { Image(systemName: "pills.fill").foregroundStyle(TeenTheme.violet).font(.title3).frame(width: 38, height: 38).background(TeenTheme.violet.opacity(0.12), in: Circle()); VStack(alignment: .leading, spacing: 4) { Text("Креатин").font(.headline); Text("Напоминание в \(store.creatineHour):00").font(.caption).foregroundStyle(TeenTheme.muted) }; Spacer(); Toggle("Напоминание", isOn: Binding(get: { store.creatineReminder }, set: { store.creatineReminder = $0; store.save(); Task { await store.scheduleCreatine() } })).labelsHidden().tint(TeenTheme.violet) } }
+            TeenCard { HStack(spacing: 13) { Image(systemName: "drop.badge.clock").foregroundStyle(TeenTheme.ice).font(.title3).frame(width: 38, height: 38).background(TeenTheme.ice.opacity(0.12), in: Circle()); VStack(alignment: .leading, spacing: 4) { Text("Вода").font(.headline); Text("Каждые 2 часа · 09:00–23:00").font(.caption).foregroundStyle(TeenTheme.muted) }; Spacer(); Toggle("Вода", isOn: Binding(get: { store.reminders }, set: { store.reminders = $0; store.save(); Task { await store.schedule() } })).labelsHidden().tint(TeenTheme.ice) } }
+            TeenCard { HStack(spacing: 13) { Image(systemName: "pills.fill").foregroundStyle(TeenTheme.violet).font(.title3).frame(width: 38, height: 38).background(TeenTheme.violet.opacity(0.12), in: Circle()); VStack(alignment: .leading, spacing: 4) { Text("Креатин").font(.headline); Text("Напоминание в \(store.creatineHour):00").font(.caption).foregroundStyle(TeenTheme.muted) }; Spacer(); Toggle("Напоминание", isOn: Binding(get: { store.creatineReminder }, set: { store.creatineReminder = $0; store.save(); Task { await store.scheduleCreatine() } })).labelsHidden().tint(TeenTheme.violet) } }
             if store.creatineReminder {
                 Picker("Время", selection: Binding(get: { store.creatineHour }, set: { store.creatineHour = $0; store.save(); Task { await store.scheduleCreatine() } })) {
                     ForEach(6...22, id: \.self) { h in Text("\(h):00").tag(h) }
@@ -638,7 +642,7 @@ struct PremiumSettingsView: View {
                 .padding(.top, 8)
             }
             TeenSectionTitle("информация")
-            TeenCard { VStack(alignment: .leading, spacing: 10) { Label("Локальное хранение", systemImage: "lock.fill").font(.headline); Text("Данные приложения остаются на устройстве. Выбранный контекст AI Coach отправляется Google Gemini только после отдельного согласия.").font(.caption).foregroundStyle(TeenTheme.muted); Link(destination: URL(string: "https://t.me/sellyou4ss")!) { Label("Telegram разработчика", systemImage: "paperplane.fill").font(.subheadline.weight(.semibold)).foregroundStyle(TeenTheme.ice) } } }
+            TeenCard { VStack(spacing: 8) { Text("GymForTeenage").font(.headline).multilineTextAlignment(.center); Text("Версия 1.0").font(.subheadline).foregroundStyle(TeenTheme.muted).multilineTextAlignment(.center); Divider().padding(.vertical, 4); Text("Данные приложения остаются на устройстве. Выбранный контекст AI Coach отправляется Google Gemini только после отдельного согласия.").font(.caption).foregroundStyle(TeenTheme.muted).multilineTextAlignment(.center); Link(destination: URL(string: "https://t.me/sellyou4ss")!) { Label("Telegram разработчика", systemImage: "paperplane.fill").font(.subheadline.weight(.semibold)).foregroundStyle(TeenTheme.ice).multilineTextAlignment(.center) } } }
         }.frame(maxWidth: .infinity).padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 112) }.toolbar(.hidden, for: .navigationBar)
             .task { refreshAIKeyStatus() }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
@@ -654,7 +658,7 @@ struct PremiumSettingsView: View {
         }
     }
     private var aiSettingsCard: some View {
-        TeenCard(accent: TeenTheme.violet) {
+        TeenCard {
             VStack(alignment: .leading, spacing: 14) {
                 Toggle("Включить AI-помощника", isOn: $aiCoachEnabled).tint(TeenTheme.violet)
                 Button("Изменить категории") { presentsAIConsent = true }
