@@ -262,6 +262,8 @@ struct PremiumExerciseView: View {
     @State private var replace = false
     @State private var dragOffset: CGFloat = 0
     @State private var showingSkipUndo = false
+    @State private var isExpandedNotes = false
+    @State private var isExpandedHistory = true
     private let skipThreshold: CGFloat = -80
     private let minimumDrag: CGFloat = 55
     var body: some View {
@@ -318,12 +320,11 @@ struct PremiumExerciseView: View {
     private func hero(_ exercise: Exercise, session: Session) -> some View { TeenCard { VStack(spacing: 12) { ZStack { Circle().stroke(TeenTheme.raised, lineWidth: 6); Circle().trim(from: 0, to: Double(index + 1) / Double(session.exercises.count)).stroke(TeenTheme.ice, style: StrokeStyle(lineWidth: 6, lineCap: .round)).rotationEffect(.degrees(-90)); Image(uiImage: exerciseUIImage(exercise.image)).resizable().scaledToFill().frame(width: 92, height: 92).clipShape(Circle()) }.frame(width: 108, height: 108); Text(exercise.title.uppercased()).font(.headline).multilineTextAlignment(.center); Text("Тренировка · упражнение \(index + 1)").font(.caption).foregroundStyle(TeenTheme.muted) } .frame(maxWidth: .infinity) } }
     private func setCard(_ entry: ExerciseLog) -> some View { TeenCard { VStack(alignment: .leading, spacing: 12) { TeenSectionTitle("подходы", detail: "вес · повторы"); ForEach(entry.sets.indices, id: \.self) { row in setRow(entry.sets[row], row: row) }; HStack { Button { store.mutate { $0.exercises[index].sets.append(SetLog()) } } label: { Label("Подход", systemImage: "plus").font(.subheadline.weight(.bold)).foregroundStyle(TeenTheme.lime) }; Spacer(); if entry.sets.count > 2 { Button("Удалить") { store.mutate { $0.exercises[index].sets.removeLast() } }.foregroundStyle(.red).font(.caption) } } } } }
     private func setRow(_ set: SetLog, row: Int) -> some View {
-        let isLast = row == 0
         return HStack(spacing: 8) {
             Text("\(row + 1)").font(.caption.weight(.bold)).frame(width: 30, height: 30).background(set.skipped ? Color.red.opacity(0.16) : TeenTheme.lime.opacity(0.12), in: Circle()).foregroundStyle(set.skipped ? .red : TeenTheme.lime)
             TextField("кг", text: Binding(get: { set.weight }, set: { value in store.mutate { s in s.exercises[index].sets[row].weight = value } })).keyboardType(.decimalPad).multilineTextAlignment(.center).padding(10).background(TeenTheme.raised, in: Capsule()).contentShape(Rectangle())
             TextField("раз", text: Binding(get: { set.reps }, set: { value in store.mutate { $0.exercises[index].sets[row].reps = value } })).keyboardType(.numberPad).multilineTextAlignment(.center).padding(10).background(TeenTheme.raised, in: Capsule()).contentShape(Rectangle())
-            if set.sets.count > 1 {
+            if entry.sets.count > 1 {
                 Button { store.mutate { $0.exercises[index].sets.remove(at: row) } } label: {
                     Image(systemName: "minus.circle.fill").font(.caption.weight(.bold)).frame(width: 34, height: 34).foregroundStyle(.red).background(Color.red.opacity(0.14), in: Circle())
                 }.buttonStyle(PlainButtonStyle())
@@ -337,55 +338,50 @@ struct PremiumExerciseView: View {
     private func actionRow(_ entry: ExerciseLog) -> some View { HStack(spacing: 10) { Button { replace = true } label: { action("Заменить", icon: "arrow.triangle.2.circlepath") }; NavigationLink { PremiumHistoryView(exerciseID: entry.exerciseID) } label: { action("История", icon: "clock.arrow.circlepath") } } }
     private func action(_ text: String, icon: String) -> some View { VStack(spacing: 6) { Image(systemName: icon); Text(text).font(.caption2.weight(.semibold)) }.foregroundStyle(.white).frame(maxWidth: .infinity).padding(.vertical, 12).background(TeenTheme.surface, in: RoundedRectangle(cornerRadius: 16)).overlay(RoundedRectangle(cornerRadius: 16).stroke(TeenTheme.line)) }
     private func notes(_ entry: ExerciseLog) -> some View {
-        @State private var isExpanded = false
         return TeenCard { VStack(alignment: .leading, spacing: 4) {
             Button {
-                isExpanded.toggle()
+                isExpandedNotes.toggle()
             } label: {
                 HStack {
                     Text("Техника выполнения").font(.subheadline.weight(.semibold))
                     Spacer()
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down").font(.caption).foregroundStyle(TeenTheme.muted)
+                    Image(systemName: isExpandedNotes ? "chevron.up" : "chevron.down").font(.caption).foregroundStyle(TeenTheme.muted)
                 }
             }
-            if isExpanded {
+            if isExpandedNotes {
                 TextEditor(text: Binding(get: { store.instructions[entry.exerciseID] ?? TechniqueGuide.instruction(for: entry.exerciseID) }, set: { store.instructions[entry.exerciseID] = $0; store.save() })).scrollContentBackground(.hidden).frame(minHeight: 100).padding(6).background(TeenTheme.raised, in: RoundedRectangle(cornerRadius: 10))
                 Text("Подсказка для безопасного выполнения. Выбирай комфортный вес и диапазон движения.").font(.caption2).foregroundStyle(TeenTheme.muted)
             }
         } }
     }
     private func history(_ entry: ExerciseLog) -> some View {
-        @State private var isExpanded = true
         let latest = store.exerciseHistory(for: entry.exerciseID).first
         return TeenCard {
             VStack(alignment: .leading, spacing: 6) {
                 Button {
-                    isExpanded.toggle()
+                    isExpandedHistory.toggle()
                 } label: {
                     HStack {
                         Text("Предыдущая тренировка").font(.subheadline.weight(.semibold))
                         Spacer()
-                        if let latest {
-                            Text(latest.record.date.ruLong).font(.caption2).foregroundStyle(TeenTheme.muted)
-                        }
-                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down").font(.caption).foregroundStyle(TeenTheme.muted)
+                        Image(systemName: isExpandedHistory ? "chevron.up" : "chevron.down").font(.caption).foregroundStyle(TeenTheme.muted)
                     }
                 }
-                if isExpanded, let latest {
-                    ForEach(Array(latest.log.sets.enumerated()), id: \.offset) { i, set in
-                        HStack(spacing: 6) {
-                            Text("подход \(i + 1)").font(.system(size: 9, weight: .bold)).foregroundStyle(TeenTheme.muted)
-                            Spacer()
-                            Text("\(set.weight) кг").font(.caption.weight(.semibold)).monospacedDigit()
-                            Text("\(set.reps) повт.").font(.caption.weight(.semibold)).monospacedDigit()
+                if isExpandedHistory {
+                    if let latest {
+                        ForEach(Array(latest.log.sets.enumerated()), id: \.offset) { i, set in
+                            HStack(spacing: 6) {
+                                Text("подход \(i + 1)").font(.system(size: 9, weight: .bold)).foregroundStyle(TeenTheme.muted)
+                                Spacer()
+                                Text("\(set.weight) кг").font(.caption.weight(.semibold)).monospacedDigit()
+                                Text("\(set.reps) повт.").font(.caption.weight(.semibold)).monospacedDigit()
+                            }
+                            .padding(.horizontal, 8).padding(.vertical, 4)
+                            .background(TeenTheme.raised, in: RoundedRectangle(cornerRadius: 8))
                         }
-                        .padding(.horizontal, 8).padding(.vertical, 4)
-                        .background(TeenTheme.raised, in: RoundedRectangle(cornerRadius: 8))
                     }
-                } else if !isExpanded, let latest {
-                    Text("Показать подходы").font(.caption2).foregroundStyle(TeenTheme.muted)
                 } else {
-                    Text("Пока нет истории — заверши тренировку, чтобы увидеть результат").font(.caption).foregroundStyle(TeenTheme.muted)
+                    Text("Показать подходы").font(.caption2).foregroundStyle(TeenTheme.muted)
                 }
             }
         }
