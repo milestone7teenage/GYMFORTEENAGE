@@ -1,24 +1,11 @@
 import Foundation
 import SwiftUI
 
-enum AIProvider: CaseIterable, Identifiable, RawRepresentable {
+enum AIProvider: String, CaseIterable, Identifiable {
     case openRouter
     case googleGemini
     
-    public init?(rawValue: String) {
-        switch rawValue {
-        case "openRouter": self = .openRouter
-        case "googleGemini": self = .googleGemini
-        default: return nil
-        }
-    }
-    
-    public var rawValue: String {
-        switch self {
-        case .openRouter: return "openRouter"
-        case .googleGemini: return "googleGemini"
-        }
-    }
+    var id: String { rawValue }
     
     var name: String {
         switch self {
