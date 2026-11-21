@@ -108,7 +108,7 @@
 		A0000000000000000000007B = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Сгибание ног.png"; sourceTree = "<group>";};
 		A0000000000000000000007C = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Трицепс в блоке.png"; sourceTree = "<group>";};
 		A0000000000000000000007D = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Тяга вертикального блока.png"; sourceTree = "<group>";};
-		A0000000000000000000007E = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Французский жим.png"; sourceTree = "<group>";};
+		A0000000000000000000007E = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Тяга Т-Грифа.png"; sourceTree = "<group>";};
  A00000000000000000000080 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MetricsTests.swift"; sourceTree = "<group>";};
 		A00000000000000000000082 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StoreIntegrationTests.swift"; sourceTree = "<group>";};
  A00000000000000000000020 = {isa = XCConfigurationList; buildConfigurations = (A00000000000000000000090,A00000000000000000000091,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;};
