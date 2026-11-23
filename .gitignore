@@ -1,0 +1,79 @@
+# Xcode
+build/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+*.xcuserstate
+!default.xcuserstate
+*.moved-aside
+DerivedData
+*.hmap
+*.ipa
+*.xcworkspace
+!default.xcworkspace
+xcuserdata
+*.framework
+*.bundle
+*.dylib
+*.app
+*.dSYM.zip
+*.dSYM
+*.swiftmodule
+*.swiftinterface
+*.playground
+
+# CocoaPods
+Pods/
+*.xcodeproj
+*.xcode
+project.xcworkspace
+
+# Carthage
+Carthage/Build
+
+# Swift Package Manager
+.swiftpm/
+.build/
+
+# Xcode Auto-Generated Files
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+!*.xcodeproj/xcshareddata/xcschemes/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test Coverage
+*.html
+*.profraw
+*.profdata
+coverage/
+
+# Backup files
+*.bak
+*.backup
+
+# Asset Catalogs (uncomment if needed)
+# Assets/*.xcassets
+
+# Derived data for CI
+DerivedData/
