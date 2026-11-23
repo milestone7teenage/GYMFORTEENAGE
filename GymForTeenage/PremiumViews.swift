@@ -245,14 +245,14 @@ struct PremiumHomeView: View {
             Button {
                 showOneTimeTasks = true
             } label: {
-                taskCard(title: "Разовая задача", icon: "checklist")
+                taskCard(title: "Разовая", icon: "checklist")
             }
             .buttonStyle(TeenPressStyle())
             
             Button {
                 showRecurringTasks = true
             } label: {
-                taskCard(title: "Регулярная задача", icon: "repeat")
+                taskCard(title: "Регулярная", icon: "repeat")
             }
             .buttonStyle(TeenPressStyle())
         }
